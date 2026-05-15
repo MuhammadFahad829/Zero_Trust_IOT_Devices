@@ -1,0 +1,9 @@
+{
+  "segments": [
+    {"name": "iot", "cidr": "192.168.1.0/24", "limit_mbps": 5},
+    {"name": "guest", "cidr": "192.168.2.0/24", "limit_mbps": 10}
+  ],
+  "rules": [
+    {"id": "block_telnet", "match": {"protocol": "tcp", "dport": 23}, "action": "DROP"}
+  ]
+}

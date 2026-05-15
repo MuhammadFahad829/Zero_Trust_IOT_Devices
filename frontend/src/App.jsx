@@ -1,0 +1,290 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Activity, ShieldAlert, ShieldCheck, Menu } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import DeviceCard from './components/DeviceCard';
+import AuditLogsTable from './components/AuditLogsTable';
+import ThreatVault from './components/ThreatVault';
+import NetworkTopology from './components/NetworkTopology';
+import { containerVariant } from './utils/animations';
+
+const App = () => {
+  const [devices, setDevices] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [totalBandwidth, setTotalBandwidth] = useState(0);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:8000/ws');
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.event === 'NEW_DEVICE' && msg.data?.ip) {
+        setDevices((prev) => {
+          if (prev.some((d) => d.ip === msg.data.ip)) return prev;
+          return [
+            ...prev,
+            {
+              ...msg.data,
+              status: msg.data.status || 'Blocked',
+              trafficMB: 0,
+              trafficBytes: 0,
+              trafficHistory: [],
+              trafficMbps: 0,
+              alert: false,
+            },
+          ];
+        });
+      }
+
+      if (msg.event === 'DEVICES_TRAFFIC' && msg.data) {
+        // msg.data: { ip: { mbps, total_mb, total_bytes, history } }
+        setDevices((prev) =>
+          prev.map((d) => {
+            const snap = msg.data[d.ip];
+            if (!snap) return d;
+            return {
+              ...d,
+              trafficMB: snap.total_mb ?? d.trafficMB,
+              trafficBytes: snap.total_bytes ?? d.trafficBytes,
+              trafficHistory: snap.history ?? d.trafficHistory,
+              trafficMbps: snap.mbps ?? d.trafficMbps,
+            };
+          }),
+        );
+      }
+
+      if ((msg.event === 'STATUS_UPDATE' || msg.event === 'ANOMALY_ALERT') && msg.ip) {
+        setDevices((prev) =>
+          prev.map((d) => {
+            if (d.ip !== msg.ip) return d;
+            const newStatus = msg.status || d.status || 'Blocked';
+            const becameQuarantined = newStatus === 'Quarantined' && d.status !== 'Quarantined';
+            const updated = { ...d, status: newStatus };
+            if (becameQuarantined) {
+              updated.alert = true;
+              // clear alert after animation
+              setTimeout(() => {
+                setDevices((cur) => cur.map((dd) => (dd.ip === msg.ip ? { ...dd, alert: false } : dd)));
+              }, 1800);
+            }
+            return updated;
+          }),
+        );
+      }
+
+      if (msg.event === 'LIMIT_UPDATE' && msg.ip) {
+        setDevices((prev) => prev.map((d) => (d.ip === msg.ip ? { ...d, mb_limit: msg.mb_limit } : d)));
+      }
+
+      if (msg.event === 'SEGMENT_UPDATE' && msg.ip) {
+        setDevices((prev) => prev.map((d) => (d.ip === msg.ip ? { ...d, segment: msg.segment } : d)));
+      }
+
+      if (msg.event === 'TRAFFIC_UPDATE' && msg.data?.mbps !== undefined) {
+        setTotalBandwidth(Number(msg.data.mbps) || 0);
+      }
+    };
+
+    const fetchDevices = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/devices');
+        const data = await res.json();
+        const deviceList = Array.isArray(data.devices) ? data.devices : [];
+        setDevices((prev) => {
+          const byIp = new Map(prev.map((p) => [p.ip, p]));
+          deviceList.forEach((d) => {
+            const existing = byIp.get(d.ip) || {};
+            // Preserve status coming from websocket (live updates), otherwise use backend status
+            const status = existing.status || d.status || 'Blocked';
+            byIp.set(d.ip, {
+              ...existing,
+              ...d,
+              status,
+              score: d.score || existing.score || 100,
+              // normalize traffic keys
+              trafficMB: d.trafficMB ?? d.total_mb ?? existing.trafficMB,
+              trafficBytes: d.trafficBytes ?? d.total_bytes ?? existing.trafficBytes,
+              trafficHistory: d.trafficHistory ?? existing.trafficHistory,
+              mb_limit: d.mb_limit ?? existing.mb_limit ?? 100,
+              segment: d.segment ?? existing.segment ?? '',
+            });
+          });
+          return Array.from(byIp.values());
+        });
+      } catch (err) {
+        console.error('Failed to fetch devices:', err);
+      }
+    };
+
+    fetchDevices();
+    const devInterval = setInterval(fetchDevices, 3000);
+    return () => {
+      ws.close();
+      clearInterval(devInterval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchTraffic = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/traffic');
+        const data = await res.json();
+        if (data?.mbps !== undefined) {
+          setTotalBandwidth(Number(data.mbps) || 0);
+        }
+      } catch (err) {
+        // ignore noisy fallback errors if websocket is already active
+      }
+    };
+
+    fetchTraffic();
+    const interval = setInterval(fetchTraffic, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/logs');
+        const data = await res.json();
+        setLogs(Array.isArray(data.logs) ? data.logs : []);
+      } catch (err) {
+        console.error('Failed to fetch logs:', err);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const quarantinedCount = useMemo(
+    () => devices.filter((d) => d.status === 'Blocked' || d.status === 'Quarantined').length,
+    [devices],
+  );
+
+  const allowedCount = useMemo(
+    () => devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length,
+    [devices],
+  );
+
+  const handleStatusChange = (ip, status) => {
+    setDevices((prev) => prev.map((d) => (d.ip === ip ? { ...d, status } : d)));
+  };
+
+  const handleLimitChange = (ip, mbLimit) => {
+    setDevices((prev) => prev.map((d) => (d.ip === ip ? { ...d, mb_limit: mbLimit } : d)));
+  };
+
+  const arrangedDevices = useMemo(() => {
+    const now = Date.now() / 1000;
+    const list = devices.map((d) => {
+      const lastSeen = Number(d.last_seen || 0);
+      const ageSec = lastSeen > 0 ? now - lastSeen : Number.POSITIVE_INFINITY;
+      const online = ageSec <= 45;
+      return { ...d, online, ageSec };
+    });
+
+    return list.sort((a, b) => {
+      if (a.online !== b.online) return a.online ? -1 : 1;
+      const aBlocked = a.status === 'Blocked' || a.status === 'Quarantined';
+      const bBlocked = b.status === 'Blocked' || b.status === 'Quarantined';
+      if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+      const ta = Number(a.trafficBytes || 0);
+      const tb = Number(b.trafficBytes || 0);
+      if (ta !== tb) return tb - ta;
+      return String(a.ip || '').localeCompare(String(b.ip || ''));
+    });
+  }, [devices]);
+
+  return (
+    <div className="flex h-screen bg-background text-gray-100 antialiased overflow-hidden">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        threatCount={quarantinedCount}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+      />
+
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+        />
+      )}
+
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-10">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden mb-4 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-gray-700 text-sm"
+            >
+              <Menu size={16} />
+              Menu
+            </button>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Autonomous Security Console</h1>
+            <p className="text-gray-400 mt-1">Zero-Trust Network Operations Center</p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
+              <Activity className="text-accent-blue" size={18} />
+              <div>
+                <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Live Traffic</span>
+                <span className="text-lg font-bold font-mono">{totalBandwidth.toFixed(2)} MB/s</span>
+              </div>
+            </div>
+
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
+              <ShieldCheck className="text-accent-green" size={18} />
+              <div>
+                <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Allowed</span>
+                <span className="text-lg font-bold">{allowedCount}</span>
+              </div>
+            </div>
+
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
+              <ShieldAlert className="text-accent-red" size={18} />
+              <div>
+                <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Quarantined</span>
+                <span className="text-lg font-bold">{quarantinedCount}</span>
+              </div>
+            </div>
+          </motion.div>
+        </header>
+
+        {(activeTab === 'dashboard' || activeTab === 'devices') && (
+          <motion.div
+            variants={containerVariant}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+          >
+            {arrangedDevices.map((device) => (
+              <DeviceCard
+                key={device.ip}
+                device={device}
+                onVerify={(ip) => handleStatusChange(ip, 'Allowed')}
+                onBlock={(ip) => handleStatusChange(ip, 'Quarantined')}
+                onLimitChange={handleLimitChange}
+              />
+            ))}
+          </motion.div>
+        )}
+
+        {activeTab === 'threats' && <ThreatVault devices={arrangedDevices} />}
+        {activeTab === 'topology' && <NetworkTopology devices={arrangedDevices} />}
+        {activeTab === 'logs' && <AuditLogsTable logs={logs} />}
+      </main>
+    </div>
+  );
+};
+
+export default App;

@@ -1,0 +1,133 @@
+import threading
+import time
+from collections import deque
+from typing import Optional, Callable
+
+from scapy.all import sniff, IP
+import database
+
+
+class TrafficMonitor:
+    def __init__(self, interface: str = "wlp2s0", threshold_mb: int = 20, on_alert: Optional[Callable] = None):
+        """
+        interface: interface to sniff on
+        threshold_mb: threshold in megabytes per monitoring window before alert
+        on_alert: callback(ip) when threshold crossed
+        """
+        self.interface = interface
+        self.threshold = threshold_mb * 1024 * 1024  # MB -> Bytes
+        self.device_total_bytes = {}  # { ip: total_bytes }
+        self.device_windows = {}  # { ip: deque[(timestamp, bytes)] }
+        self.device_history = {}  # { ip: deque[sample] }
+        self.on_alert = on_alert
+        self.total_bytes = 0
+        self._window = deque()  # (timestamp, bytes)
+        self._lock = threading.Lock()
+
+    def _trim_device_window(self, ip_src: str, now: float):
+        window = self.device_windows.setdefault(ip_src, deque())
+        while window and (now - window[0][0]) > 3.0:
+            window.popleft()
+
+    def _device_mbps(self, ip_src: str) -> float:
+        window = self.device_windows.get(ip_src)
+        if not window:
+            return 0.0
+
+        now = time.time()
+        total = sum(size for _, size in window)
+        span = max(now - window[0][0], 0.5)
+        return (total / span) / (1024 * 1024)
+
+    def _append_device_sample(self, ip_src: str, now: float):
+        history = self.device_history.setdefault(ip_src, deque(maxlen=60))
+        history.append(
+            {
+                "time": time.strftime("%H:%M:%S", time.localtime(now)),
+                "mbps": round(self._device_mbps(ip_src), 4),
+                "total_bytes": int(self.device_total_bytes.get(ip_src, 0)),
+                "total_mb": round(self.device_total_bytes.get(ip_src, 0) / (1024 * 1024), 3),
+                "timestamp": now,
+            }
+        )
+
+    def _process_packet(self, pkt):
+        if pkt.haslayer(IP):
+            ip_src = pkt[IP].src
+            p_size = len(pkt)
+
+            with self._lock:
+                now = time.time()
+                self.total_bytes += p_size
+                self._window.append((now, p_size))
+                self._trim_window(now)
+
+                device_window = self.device_windows.setdefault(ip_src, deque())
+                device_window.append((now, p_size))
+                self._trim_device_window(ip_src, now)
+
+                self.device_total_bytes[ip_src] = self.device_total_bytes.get(ip_src, 0) + p_size
+                current_total = self.device_total_bytes[ip_src]
+                self._append_device_sample(ip_src, now)
+
+            # Check per-device MB limit if configured in database, otherwise use global threshold
+            try:
+                mb_limit = database.get_device_mb_limit(ip_src)
+                if mb_limit is None:
+                    limit_bytes = self.threshold
+                else:
+                    limit_bytes = float(mb_limit) * 1024 * 1024
+            except Exception:
+                limit_bytes = self.threshold
+
+            if current_total > limit_bytes:
+                if self.on_alert:
+                    try:
+                        self.on_alert(ip_src)
+                    except Exception:
+                        pass
+                # Do not reset total bytes to preserve usage history, only throttle repeated alerts
+                with self._lock:
+                    self.device_total_bytes[ip_src] = current_total
+
+    def _trim_window(self, now: float):
+        while self._window and (now - self._window[0][0]) > 3.0:
+            self._window.popleft()
+
+    def get_current_mbps(self) -> float:
+        """Return near real-time traffic in MB/s based on last ~3 seconds."""
+        with self._lock:
+            now = time.time()
+            self._trim_window(now)
+            if not self._window:
+                return 0.0
+
+            total = sum(size for _, size in self._window)
+            span = max(now - self._window[0][0], 0.5)
+            bytes_per_sec = total / span
+            return bytes_per_sec / (1024 * 1024)
+
+    def get_snapshot(self) -> dict:
+        return {
+            "mbps": round(self.get_current_mbps(), 3),
+            "total_bytes": int(self.total_bytes),
+            "timestamp": time.time(),
+        }
+
+    def get_device_history(self, ip_src: str) -> list:
+        with self._lock:
+            history = self.device_history.get(ip_src, deque())
+            return list(history)
+
+    def get_device_snapshot(self, ip_src: str) -> dict:
+        with self._lock:
+            return {
+                "mbps": round(self._device_mbps(ip_src), 4),
+                "total_bytes": int(self.device_total_bytes.get(ip_src, 0)),
+                "total_mb": round(self.device_total_bytes.get(ip_src, 0) / (1024 * 1024), 3),
+                "history": list(self.device_history.get(ip_src, deque())),
+            }
+
+    def start_monitoring(self):
+        print(f"[*] Traffic Monitor active on {self.interface} (Limit: {self.threshold/(1024*1024)}MB)")
+        sniff(iface=self.interface, prn=self._process_packet, store=0)
