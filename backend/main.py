@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import json
+import math
 import os
 import subprocess
 import sys
@@ -148,6 +149,130 @@ if not HOTSPOT_ACTIVE:
     print(f"[*] Hotspot not active on {LAN_INTERFACE} (mode={LAN_INTERFACE_MODE}). Device discovery is paused.")
 
 
+def _database_demo_mode_enabled() -> bool:
+    mode = os.environ.get("DEMO_DATABASE_MODE", "auto").strip().lower()
+    if mode in ("1", "true", "yes", "on"):
+        return True
+    if mode in ("0", "false", "no", "off"):
+        return False
+    return not HOTSPOT_ACTIVE
+
+
+def _is_device_online(last_seen: float) -> bool:
+    if not HOTSPOT_ACTIVE:
+        return False
+
+    try:
+        last_seen_value = float(last_seen or 0)
+    except Exception:
+        return False
+
+    if last_seen_value <= 0:
+        return False
+
+    return (time.time() - last_seen_value) <= 45
+
+
+def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_type: str = None, online: bool = True):
+    now = time.time()
+    current = database.get_device(ip) or {}
+    status = current.get("status") or "Blocked"
+    segment = current.get("segment", "") if current else ""
+    mb_limit = current.get("mb_limit", 100.0) if current else 100.0
+
+    try:
+        database.add_or_update_device(
+            ip,
+            mac,
+            now,
+            vendor=vendor or current.get("vendor"),
+            device_type=device_type or current.get("device_type"),
+            status=status,
+            mb_limit=mb_limit,
+            segment=segment,
+        )
+    except Exception:
+        pass
+
+    payload = {
+        "event": "NEW_DEVICE",
+        "data": {
+            "ip": ip,
+            "mac": mac or current.get("mac"),
+            "vendor": vendor or current.get("vendor"),
+            "device_type": device_type or current.get("device_type"),
+            "status": status,
+            "score": 100,
+            "online": bool(online),
+            "last_seen": now,
+            "segment": segment,
+        },
+    }
+
+    try:
+        asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
+    except Exception:
+        pass
+
+
+DEMO_TRAFFIC_TICK = 0
+DEMO_TRAFFIC_PRIMED = False
+
+
+def _device_demo_bytes(ip: str, tick: int, position: int, blocked: bool) -> int:
+    seed = sum(ord(ch) for ch in str(ip)) + position * 37
+    base = 12_000 + (seed % 18_000)
+    wave = int(abs(math.sin((tick + position + seed) / 3.0)) * 18_000)
+    bytes_count = base + wave
+    if blocked:
+        bytes_count = max(4_000, bytes_count // 2)
+    return bytes_count
+
+
+def _prime_demo_traffic_from_database() -> None:
+    global DEMO_TRAFFIC_PRIMED
+    if DEMO_TRAFFIC_PRIMED or not _database_demo_mode_enabled():
+        return
+
+    rows = database.list_devices()
+    if not rows:
+        return
+
+    now = time.time()
+    for idx, row in enumerate(rows):
+        ip = row.get("ip")
+        if not ip:
+            continue
+
+        blocked = (row.get("status") or "").lower() in ("blocked", "quarantined")
+        for offset in range(6):
+            sample_ts = now - ((6 - offset) * 5)
+            bytes_count = _device_demo_bytes(ip, offset, idx, blocked)
+            monitor.inject_sample(ip, bytes_count, sample_ts)
+
+    DEMO_TRAFFIC_PRIMED = True
+    print(f"[*] Demo traffic primed for {len(rows)} stored device(s)")
+
+
+def _advance_demo_traffic_from_database() -> None:
+    global DEMO_TRAFFIC_TICK
+    if not _database_demo_mode_enabled():
+        return
+
+    rows = database.list_devices()
+    if not rows:
+        return
+
+    DEMO_TRAFFIC_TICK += 1
+    for idx, row in enumerate(rows):
+        ip = row.get("ip")
+        if not ip:
+            continue
+        blocked = (row.get("status") or "").lower() in ("blocked", "quarantined")
+        bytes_count = _device_demo_bytes(ip, DEMO_TRAFFIC_TICK, idx, blocked)
+        monitor.inject_sample(ip, bytes_count, time.time())
+
+
 def _is_hotspot_client_ip(ip_text: str) -> bool:
     if not HOTSPOT_ACTIVE:
         return False
@@ -223,22 +348,12 @@ def on_device_discovered(ip, mac, vendor=None, device_type=None):
         return
 
     print(f"[*] New Device Alert: {ip} | {vendor} | Type: {device_type}")
-    payload = {
-        "event": "NEW_DEVICE",
-        "data": {"ip": ip, "mac": mac, "vendor": vendor, "device_type": device_type, "status": "Blocked", "score": 100},
-    }
     # persist device and add log
     try:
-        database.add_or_update_device(ip, mac, time.time(), vendor=vendor, device_type=device_type, status="Blocked")
+        _broadcast_device_presence(ip, mac, vendor=vendor, device_type=device_type, online=True)
         database.add_log("NEW_DEVICE", ip=ip, detail=str({"mac": mac, "vendor": vendor, "device_type": device_type}))
     except Exception:
         pass
-    # schedule broadcast on the running loop
-    try:
-        asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
-    except Exception:
-        # If loop not ready, print and ignore
-        print("[!] Warning: event loop not ready; device event queued")
 
 
 # Prepare event loop before starting sniffing so callbacks can post to it
@@ -302,6 +417,8 @@ def seed_connected_devices_from_neighbors():
                 continue
 
             if ip_addr in scout.discovered_ips:
+                if _is_hotspot_client_ip(ip_addr):
+                    _broadcast_device_presence(ip_addr, mac_addr, _lookup_oui(mac_addr), _detect_device_type(_lookup_oui(mac_addr), mac_addr), online=True)
                 continue
 
             if not _is_hotspot_client_ip(ip_addr):
@@ -342,7 +459,45 @@ def seed_connected_devices_from_neighbors():
     _consume_neighbors()
 
 
+def seed_devices_from_database():
+    """Promote stored devices into a visible, active state when hardware discovery is unavailable."""
+    if not _database_demo_mode_enabled():
+        return
+
+    rows = database.list_devices()
+    if not rows:
+        return
+
+    for row in rows:
+        ip = row.get("ip")
+        if not ip:
+            continue
+
+        scout.discovered_ips.add(ip)
+        payload = {
+            "event": "NEW_DEVICE",
+            "data": {
+                "ip": ip,
+                "mac": row.get("mac"),
+                "vendor": row.get("vendor"),
+                "device_type": row.get("device_type"),
+                "status": row.get("status") or "Blocked",
+                "score": row.get("score", 100),
+                "online": False,
+                "last_seen": row.get("last_seen"),
+            },
+        }
+        try:
+            asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
+        except Exception:
+            pass
+
+    print(f"[*] Demo database mode seeded {len(rows)} device(s) from SQLite")
+
+
 seed_connected_devices_from_neighbors()
+seed_devices_from_database()
+_prime_demo_traffic_from_database()
 
 # --- Anomaly Alert Callback ---
 def on_anomaly_detected(ip: str):
@@ -449,6 +604,10 @@ async def _station_poller_loop():
                         on_device_discovered(ip, mac, vendor, d_type)
                     except Exception:
                         pass
+                elif ip and _is_hotspot_client_ip(ip):
+                    vendor = _lookup_oui(mac)
+                    d_type = _detect_device_type(vendor, mac)
+                    _broadcast_device_presence(ip, mac, vendor, d_type, online=True)
 
         except Exception:
             pass
@@ -492,6 +651,11 @@ async def traffic_broadcast_loop():
         # Re-evaluate hotspot/interface state at runtime in case mode changes
         try:
             _refresh_hotspot_state()
+        except Exception:
+            pass
+
+        try:
+            _advance_demo_traffic_from_database()
         except Exception:
             pass
 
@@ -684,14 +848,18 @@ async def set_device_limit(ip: str, mb: float):
 async def set_device_segment(ip: str, segment: str):
     """Assign a device to a network micro-segmentation group."""
     try:
-        database.update_device_segment(ip, segment)
+        normalized = (segment or '').strip()
+        if normalized.lower() in ('default', 'none', 'unassigned', 'clear'):
+            normalized = ''
+
+        database.update_device_segment(ip, normalized)
         try:
             enforcer.apply_segment_policies()
         except Exception:
             pass
-        database.add_log('SET_SEGMENT', ip=ip, detail=str({'segment': segment}))
-        await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': segment})
-        return {'message': f'set segment={segment} for {ip}'}
+        database.add_log('SET_SEGMENT', ip=ip, detail=str({'segment': normalized or 'Unassigned'}))
+        await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized})
+        return {'message': f"set segment={normalized or 'Unassigned'} for {ip}"}
     except Exception as e:
         return {'error': str(e)}
 
@@ -702,8 +870,10 @@ def api_list_devices():
     devices = []
     for row in device_rows:
         live = monitor.get_device_snapshot(row["ip"])
+        online = _is_device_online(row.get("last_seen"))
         devices.append({
             **row,
+            "online": online,
             "trafficMbps": live.get("mbps", 0.0),
             "trafficBytes": live.get("total_bytes", 0),
             "trafficMB": live.get("total_mb", 0.0),
@@ -723,6 +893,17 @@ def api_traffic_snapshot():
     return {
         "mbps": round(float(mbps), 3),
         "timestamp": time.time(),
+    }
+
+
+@app.get('/mode')
+def api_runtime_mode():
+    return {
+        "mode": "physical" if HOTSPOT_ACTIVE else "replay",
+        "demo_database_mode": _database_demo_mode_enabled(),
+        "hotspot_active": HOTSPOT_ACTIVE,
+        "lan_interface": LAN_INTERFACE,
+        "lan_interface_mode": LAN_INTERFACE_MODE,
     }
 
 

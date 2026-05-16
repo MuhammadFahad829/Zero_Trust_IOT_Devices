@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Wifi, Cpu, Smartphone, Monitor, ShieldAlert, CheckCircle, ArrowRight, StopCircle } from 'lucide-react';
-import { getVendorMeta, inferCategory, getDisplayName } from '../utils/deviceIdentity';
+import { Wifi, Cpu, Smartphone, Monitor, ShieldAlert, CheckCircle, ArrowRight, StopCircle, Radio } from 'lucide-react';
+import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '../utils/deviceIdentity';
 import { formatBytes } from '../utils/format';
 
 const getDeviceIcon = (vendor, deviceType) => {
@@ -19,10 +19,11 @@ const getDeviceIcon = (vendor, deviceType) => {
   return <Cpu size={20} />;
 };
 
-export default function NetworkTopology({ devices = [] }) {
+export default function NetworkTopology({ devices = [], mode = 'replay' }) {
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
   const [hovered, setHovered] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -31,18 +32,49 @@ export default function NetworkTopology({ devices = [] }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const radius = viewportWidth < 640 ? 95 : viewportWidth < 1024 ? 120 : 140;
-  const nodeSize = viewportWidth < 640 ? 'w-12 h-12' : 'w-16 h-16';
-  const useGrid = devices.length > 12;
+  const modeLabel = mode === 'physical' ? 'Physical Live Mode' : 'Live Replay Mode';
+  const modeTone = mode === 'physical' ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/20' : 'text-cyan-300 border-cyan-500/30 bg-cyan-950/20';
 
   const allowedCount = devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length;
   const quarantinedCount = devices.filter((d) => d.status === 'Blocked' || d.status === 'Quarantined').length;
+  const segmentedCount = devices.filter((d) => Boolean(d.segment)).length;
+  const unassignedCount = devices.length - segmentedCount;
+
+  const filteredDevices = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return devices;
+
+    return devices.filter((device) => {
+      const fields = [
+        device.ip,
+        device.mac,
+        device.vendor,
+        device.device_type,
+        device.segment,
+        getDisplayName(device),
+        device.status,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+
+      return fields.some((value) => value.includes(term));
+    });
+  }, [devices, searchTerm]);
 
   const orderedDevices = useMemo(() => {
-    return [...devices].sort((a, b) => {
+    return [...filteredDevices].sort((a, b) => {
+      const segmentA = String(a.segment || 'default');
+      const segmentB = String(b.segment || 'default');
+      if (segmentA !== segmentB) return segmentA.localeCompare(segmentB);
+
       const aBlocked = a.status === 'Blocked' || a.status === 'Quarantined';
       const bBlocked = b.status === 'Blocked' || b.status === 'Quarantined';
       if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+
+      const aOnline = Number(a.online) ? 1 : 0;
+      const bOnline = Number(b.online) ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+
       const aTraffic = Number(a.trafficMbps || 0);
       const bTraffic = Number(b.trafficMbps || 0);
       if (aTraffic !== bTraffic) return bTraffic - aTraffic;
@@ -50,7 +82,52 @@ export default function NetworkTopology({ devices = [] }) {
       const bName = getDisplayName(b);
       return aName.localeCompare(bName);
     });
-  }, [devices]);
+  }, [filteredDevices]);
+
+  const segmentGroups = useMemo(() => {
+    const map = new Map();
+
+    orderedDevices.forEach((device) => {
+      const key = device.segment ? String(device.segment) : '';
+      const label = device.segment ? String(device.segment) : 'Unassigned';
+      if (!map.has(key)) {
+        map.set(key, { key, label, devices: [] });
+      }
+      map.get(key).devices.push(device);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.key === '' && b.key !== '') return 1;
+      if (a.key !== '' && b.key === '') return -1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [orderedDevices]);
+
+  const visibleSegmentGroups = useMemo(() => {
+    if (!searchTerm.trim()) return segmentGroups;
+    return segmentGroups.filter((group) => group.devices.length > 0);
+  }, [segmentGroups, searchTerm]);
+
+  const clusterStyleFor = (index, total) => {
+    const presets = [
+      { top: '10%', left: '6%', width: '28%' },
+      { top: '10%', right: '6%', width: '28%' },
+      { bottom: '10%', left: '6%', width: '28%' },
+      { bottom: '10%', right: '6%', width: '28%' },
+      { top: '38%', left: '3%', width: '24%' },
+      { top: '38%', right: '3%', width: '24%' },
+      { bottom: '38%', left: '3%', width: '24%' },
+      { bottom: '38%', right: '3%', width: '24%' },
+    ];
+
+    const preset = presets[index] || {
+      top: `${12 + ((index * 11) % 62)}%`,
+      left: `${6 + ((index * 17) % 20)}%`,
+      width: total > 4 ? '24%' : '30%',
+    };
+
+    return preset;
+  };
 
   const segmentPalette = useMemo(
     () => ['#22c55e', '#3b82f6', '#eab308', '#a855f7', '#f97316', '#06b6d4'],
@@ -77,141 +154,193 @@ export default function NetworkTopology({ devices = [] }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-4">
-        <div className="flex items-center gap-3">
-          <Wifi className="text-blue-400" size={20} />
-          <div>
-            <h3 className="text-lg font-semibold text-blue-300">Network Topology</h3>
-            <p className="text-sm text-gray-400">Zero-Trust Gateway architecture - hover devices for details</p>
+      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-5 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex items-center gap-3">
+            <Wifi className="text-blue-400" size={20} />
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-blue-300/70 mb-1">Network view</p>
+              <h3 className="text-lg font-semibold text-blue-300">Network Topology</h3>
+              <p className="text-sm text-gray-400">Hover devices for details and quick actions</p>
+            </div>
+          </div>
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-medium ${modeTone}`}>
+              <Radio size={12} />
+              {modeLabel}
+            </span>
+            <div className="flex flex-wrap gap-2 text-[11px] text-gray-300 justify-start md:justify-end">
+            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Allowed: {allowedCount}</span>
+            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Quarantined: {quarantinedCount}</span>
+            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Devices: {devices.length}</span>
+            </div>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-300">
+        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search IP, vendor, segment, status..."
+              className="w-full rounded-xl border border-gray-800/80 bg-gray-950/60 px-4 py-2.5 pr-10 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">⌕</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSearchTerm('')}
+            className="btn btn-ghost h-full px-4 py-2.5 text-sm"
+            disabled={!searchTerm}
+          >
+            Clear
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-300">
           <span className="px-2 py-1 rounded border border-gray-700 bg-gray-900/40">Node size = live traffic</span>
           <span className="px-2 py-1 rounded border border-gray-700 bg-gray-900/40">Ring color = segment</span>
-          <span className="px-2 py-1 rounded border border-gray-700 bg-gray-900/40">Token = vendor logo code</span>
+          <span className="px-2 py-1 rounded border border-gray-700 bg-gray-900/40">Vendor token = icon code</span>
+          <span className="px-2 py-1 rounded border border-gray-700 bg-gray-900/40">Nodes sorted by segment and status</span>
         </div>
       </div>
 
-      <div ref={containerRef} className="relative h-[360px] sm:h-96 card-soft p-4 sm:p-6 overflow-hidden">
-        {/* Center gateway */}
-        <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-          <motion.div animate={{ boxShadow: ['0_0_0_0_rgba(59,130,246,0.35)', '0_0_0_18px_rgba(59,130,246,0)'] }} transition={{ repeat: Infinity, duration: 2 }} className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-600 rounded-xl flex items-center justify-center border border-blue-400">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+        <div className="card-soft border border-emerald-500/20 bg-emerald-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+          <div>
+            <p className="text-emerald-300 font-semibold text-lg">{devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length}</p>
+            <p className="text-xs text-gray-400">Active</p>
+          </div>
+          <div className="text-emerald-400"><CheckCircle /></div>
+        </div>
+        <div className="card-soft border border-red-500/20 bg-red-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+          <div>
+            <p className="text-red-300 font-semibold text-lg">{quarantinedCount}</p>
+            <p className="text-xs text-gray-400">Quarantined</p>
+          </div>
+          <div className="text-red-400"><ShieldAlert /></div>
+        </div>
+        <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+          <div>
+            <p className="text-blue-300 font-semibold text-lg">{segmentedCount}</p>
+            <p className="text-xs text-gray-400">Segmented</p>
+          </div>
+          <div className="text-blue-400"><Radio size={18} /></div>
+        </div>
+        <div className="card-soft border border-gray-500/20 bg-gray-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+          <div>
+            <p className="text-gray-200 font-semibold text-lg">{unassignedCount}</p>
+            <p className="text-xs text-gray-400">Unassigned</p>
+          </div>
+          <div className="text-gray-400"><Cpu size={18} /></div>
+        </div>
+      </div>
+
+      <div className="card-soft border border-gray-800/60 bg-gray-950/40 p-4 rounded-2xl">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-gray-500 mb-1">Device classes</p>
+            <h4 className="text-sm font-semibold text-gray-100">Personal, private, other, and core device types</h4>
+          </div>
+          <div className="text-[11px] text-gray-400">Colors reflect device class, nodes reflect segment groups</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {['Personal', 'Private', 'Other', 'Mobile', 'Computer', 'Camera', 'Network', 'IoT'].map((label) => {
+            const meta = getCategoryMeta(label, label);
+            return (
+              <span
+                key={label}
+                className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px]"
+                style={{ borderColor: meta.border, backgroundColor: meta.bg, color: meta.color }}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: meta.color }} />
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <div ref={containerRef} className="relative min-h-[420px] card-soft p-4 sm:p-6 overflow-hidden border border-gray-800/60">
+        <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+          <motion.div
+            animate={{ boxShadow: ['0_0_0_0_rgba(59,130,246,0.35)', '0_0_0_18px_rgba(59,130,246,0)'] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+            className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-600 rounded-2xl flex items-center justify-center border border-blue-400 shadow-[0_15px_40px_rgba(59,130,246,0.22)]"
+          >
             <Wifi className="text-white" size={viewportWidth < 640 ? 20 : 28} />
           </motion.div>
-          <div className="mt-2 text-xs sm:text-sm text-blue-300 font-semibold">Zero-Trust Gateway</div>
+          <div className="mt-3 text-xs sm:text-sm text-blue-300 font-semibold">Zero-Trust Gateway</div>
+          <div className="mt-1 text-[10px] text-gray-400 uppercase tracking-[0.28em]">{modeLabel}</div>
         </div>
 
-        {/* SVG layer for connection lines */}
-        {/* Draw connection lines when using circular layout */}
-        {!useGrid && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            {devices.map((device, idx) => {
-              const angle = (idx / devices.length) * 2 * Math.PI - Math.PI / 2;
-              const x = radius * Math.cos(angle);
-              const y = radius * Math.sin(angle);
-              const cx = 50 + (x / (radius * 2)) * 100; // percent
-              const cy = 50 + (y / (radius * 2)) * 100; // percent
-              const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
-              const alpha = Math.min(0.2 + (device.trafficMB || 0) / 50, 0.6);
-              return (
-                <line
-                  key={device.ip + '-line'}
-                  x1="50%" y1="50%" x2={`${cx}%`} y2={`${cy}%`}
-                  stroke={isBlocked ? `rgba(239,68,68,${0.22})` : `rgba(34,197,94,${alpha})`}
-                  strokeWidth={1}
-                />
-              );
-            })}
-          </svg>
-        )}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-x-1/2 top-1/2 h-px bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
+          <div className="absolute left-1/2 inset-y-0 w-px bg-gradient-to-b from-transparent via-blue-500/20 to-transparent" />
+        </div>
 
-        {/* Device nodes - circle or grid fallback */}
-        {!useGrid && orderedDevices.map((device, idx) => {
-          const angle = (idx / devices.length) * 2 * Math.PI - Math.PI / 2;
-          const x = radius * Math.cos(angle);
-          const y = radius * Math.sin(angle);
-          const left = `calc(50% + ${x}px)`;
-          const top = `calc(50% + ${y}px)`;
-          const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
-          const trafficScale = Math.min(1 + Number(device.trafficMbps || 0) * 0.25, 1.8);
-          const ring = segmentColor(device.segment);
-
+        {visibleSegmentGroups.map((group, index) => {
+          const segmented = group.key !== '';
+          const chipColor = segmented ? segmentColor(group.key) : '#64748b';
+          const style = clusterStyleFor(index, visibleSegmentGroups.length);
           return (
-            <motion.button
-              key={device.ip}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 + idx * 0.03 }}
-              style={{ left, top }}
-              className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-              title={`${device.vendor || 'Unknown'} - ${device.ip} - ${device.status}`}
-              onMouseEnter={(e) => setHovered({ device, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            <motion.div
+              key={group.key || 'unassigned'}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 + index * 0.04 }}
+              className="absolute rounded-2xl border bg-gray-950/55 backdrop-blur-md shadow-[0_12px_34px_rgba(15,23,42,0.28)] overflow-hidden"
+              style={{ ...style, borderColor: `${chipColor}55` }}
             >
-              <div
-                className={`${nodeSize} rounded-lg flex items-center justify-center border relative ${isBlocked ? 'bg-red-900/30 border-red-500/40' : 'bg-green-900/20 border-green-500/30'}`}
-                style={{ transform: `scale(${trafficScale})`, borderColor: ring }}
-              >
-                <div className={isBlocked ? 'text-red-400' : 'text-green-300'}>
-                  {getDeviceIcon(device.vendor)}
+              <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/5" style={{ background: `${chipColor}12` }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chipColor, boxShadow: `0 0 0 3px ${chipColor}20` }} />
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-gray-500">{segmented ? 'Segment' : 'Fallback bucket'}</div>
+                    <div className="text-sm font-semibold text-gray-100 truncate">{group.label}</div>
+                  </div>
                 </div>
-                <span
-                  className="absolute -bottom-2 px-1.5 py-0.5 rounded text-[9px] text-white"
-                  style={{ backgroundColor: getVendorMeta(device.vendor).color }}
-                >
-                  {getVendorMeta(device.vendor).token}
+                <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40 text-[11px] text-gray-300 whitespace-nowrap">
+                  {group.devices.length}
                 </span>
               </div>
-              <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs font-mono text-gray-300 text-center max-w-[80px] truncate">{device.ip}</div>
-              <div className="text-[10px] text-gray-400 text-center max-w-[90px] truncate">{getDisplayName(device)}</div>
-              <div className="w-16 h-1 bg-gray-800 rounded mt-1 overflow-hidden">
-                <div
-                  className={`h-full ${isBlocked ? 'bg-red-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${Math.min(Number(device.trafficMbps || 0) * 50, 100)}%` }}
-                />
+
+              <div className="p-3">
+                <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
+                  {group.devices.map((device) => {
+                    const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
+                    const displayName = getDisplayName(device);
+                    const vendorMeta = getVendorMeta(device.vendor);
+                    const categoryMeta = getCategoryMeta(device.device_type, device.vendor);
+                    return (
+                      <button
+                        key={device.ip}
+                        onMouseEnter={(e) => setHovered({ device, x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setHovered(null)}
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className={`flex items-center gap-3 rounded-xl border px-2.5 py-2 text-left transition-all duration-200 ${isBlocked ? 'border-red-600/30 bg-red-950/20 hover:border-red-500/50' : 'border-emerald-600/20 bg-emerald-950/10 hover:border-emerald-500/40'}`}
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-gray-950/70" style={{ borderColor: categoryMeta.border, boxShadow: `0 0 0 1px ${categoryMeta.color}20` }}>
+                          <div className={isBlocked ? 'text-red-400' : ''} style={!isBlocked ? { color: categoryMeta.color } : undefined}>{getDeviceIcon(device.vendor, device.device_type)}</div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="truncate text-xs font-semibold text-gray-100">{displayName}</div>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${isBlocked ? 'bg-red-600/80 text-white' : 'bg-green-600/90 text-white'}`}>{isBlocked ? 'Quarantined' : 'Allowed'}</span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-gray-400 font-mono">{device.ip}</div>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1 text-[10px] text-gray-400">
+                          <span className="rounded-full border border-gray-700 bg-gray-900/40 px-2 py-0.5 text-gray-300">{vendorMeta.token}</span>
+                          <span className="font-mono text-gray-500">{(Number(device.trafficMbps || 0)).toFixed(2)} MB/s</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className={`mt-1 text-[10px] px-2 rounded-full ${isBlocked ? 'bg-red-600/80 text-white' : 'bg-green-600/90 text-white'}`}>{isBlocked ? 'Quarantined' : 'Allowed'}</div>
-            </motion.button>
+            </motion.div>
           );
         })}
-
-        {useGrid && (
-          <div
-            className="absolute inset-4 grid gap-3 p-2"
-            style={{ gridTemplateColumns: `repeat(${viewportWidth < 640 ? 2 : viewportWidth < 1024 ? 3 : 4}, minmax(0, 1fr))` }}
-          >
-            {orderedDevices.map((device, index) => {
-              const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
-              const ring = segmentColor(device.segment);
-              return (
-                <button
-                  key={device.ip}
-                  onMouseEnter={(e) => setHovered({ device, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setHovered(null)}
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  className={`flex flex-col items-center p-2 rounded border ${isBlocked ? 'border-red-600/30 bg-red-900/10' : 'border-green-600/20 bg-green-900/5'}`}
-                  style={{ order: index }}
-                >
-                  <div className="w-12 h-12 rounded-md flex items-center justify-center relative">
-                    <div className="w-10 h-10 rounded-md flex items-center justify-center border" style={{ borderColor: ring }}>
-                      {getDeviceIcon(device.vendor)}
-                    </div>
-                    <span
-                      className="absolute -bottom-2 px-1.5 py-0.5 rounded text-[9px] text-white"
-                      style={{ backgroundColor: getVendorMeta(device.vendor).color }}
-                    >
-                      {getVendorMeta(device.vendor).token}
-                    </span>
-                  </div>
-                  <div className="text-[10px] mt-1 text-gray-400 truncate max-w-[100px]">{getDisplayName(device)}</div>
-                  <div className="text-xs mt-1 text-gray-200 truncate max-w-[100px]">{device.ip}</div>
-                  <div className={`mt-1 px-2 text-[10px] rounded-full ${isBlocked ? 'bg-red-600/80 text-white' : 'bg-green-600/90 text-white'}`}>{isBlocked ? 'Quarantined' : 'Allowed'}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Hover tooltip with device details and quick actions */}
@@ -229,7 +358,7 @@ export default function NetworkTopology({ devices = [] }) {
                   <div className="font-semibold text-sm">{getDisplayName(d)}</div>
                   <div className="text-gray-400 text-[11px] truncate">{getVendorMeta(d.vendor).name} • {inferCategory(d.device_type, d.vendor)} • {d.ip}</div>
                   <div className="mt-2 text-[11px] text-gray-300">Traffic: <span className="font-mono">{(d.trafficMbps || 0).toFixed(3)} MB/s</span> • <span className="font-mono">{formatBytes(d.trafficBytes || 0)}</span></div>
-                  <div className="mt-1 text-[11px] text-gray-400">Segment: <span className="font-mono">{d.segment || 'default'}</span></div>
+                  <div className="mt-1 text-[11px] text-gray-400">Segment: <span className="font-mono">{d.segment || 'Unassigned'}</span></div>
                   <div className="mt-1 text-[11px] text-gray-500">Status: <span className="font-semibold">{d.status}</span></div>
                 </div>
               </div>
@@ -255,7 +384,7 @@ export default function NetworkTopology({ devices = [] }) {
         );
       })()}
 
-      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
         <div className="card-soft border border-green-500/20 bg-green-950/10 p-3 flex items-center justify-between">
           <div>
             <p className="text-green-300 font-semibold text-lg">{allowedCount}</p>

@@ -64,15 +64,22 @@ export default function AdminPanel() {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-6xl mx-auto"
     >
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-accent-blue/20 rounded-lg text-accent-blue">
-            <Settings size={28} />
+      <div className="mb-8 card-soft border border-blue-500/20 bg-blue-950/10 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-accent-blue/20 rounded-lg text-accent-blue">
+              <Settings size={28} />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.32em] text-blue-300/80 mb-1">Control center</p>
+              <h1 className="text-3xl font-bold text-gray-100">Administration</h1>
+              <p className="text-sm text-gray-400">Manage provisioning and token security from one place</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-100">Administration</h1>
-            <p className="text-sm text-gray-400">Manage network infrastructure, provisioning, and security</p>
+          <div className="flex flex-wrap gap-2 text-[11px] text-gray-300">
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">VLAN provisioning</span>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">dnsmasq DHCP</span>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Token guarded</span>
           </div>
         </div>
       </div>
@@ -88,10 +95,11 @@ export default function AdminPanel() {
             <div>
               <h2 className="text-xl font-bold text-gray-100 flex items-center gap-2">
                 <Shield size={24} className="text-accent-blue" />
-                VLAN & DHCP Provisioning
+                Network Provisioning
               </h2>
-              <p className="text-xs text-gray-500 mt-1">Configure network segmentation infrastructure</p>
+              <p className="text-xs text-gray-500 mt-1">Create VLANs and DHCP rules for your device segments</p>
             </div>
+            <span className="px-3 py-1 rounded-full text-[11px] border border-blue-500/20 text-blue-300 bg-blue-950/20">Primary action</span>
           </div>
 
           <div className="bg-gray-800/40 border border-gray-700/40 rounded-lg p-4 mb-4">
@@ -134,21 +142,24 @@ export default function AdminPanel() {
             </div>
           )}
 
-          <button
-            onClick={() => setProvOpen(true)}
-            disabled={!applyVlan && !applyDns}
-            className="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {provLoading ? (
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-            ) : (
-              '⚙️'
-            )}
-            {provLoading ? 'Provisioning...' : 'Start Provisioning'}
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] text-gray-500">A confirmation dialog will appear before any system changes.</p>
+            <button
+              onClick={() => setProvOpen(true)}
+              disabled={!applyVlan && !applyDns}
+              className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              {provLoading ? (
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              ) : (
+                '⚙️'
+              )}
+              {provLoading ? 'Provisioning...' : 'Start Provisioning'}
+            </button>
+          </div>
 
           {provResult && (
             <div className={`mt-4 p-4 rounded-lg border ${provResult.ok ? 'bg-green-900/20 border-green-700/40' : 'bg-red-900/20 border-red-700/40'}`}>
@@ -223,15 +234,18 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              setTokenInput(localStorage.getItem('PROVISION_TOKEN') || '');
-              setTokenOpen(true);
-            }}
-            className="w-full btn btn-success"
-          >
-            🔐 Manage Token
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] text-gray-500">Keep this token in sync with the backend environment variable.</p>
+            <button
+              onClick={() => {
+                setTokenInput(localStorage.getItem('PROVISION_TOKEN') || '');
+                setTokenOpen(true);
+              }}
+              className="btn btn-success"
+            >
+              🔐 Manage Token
+            </button>
+          </div>
         </motion.div>
       </div>
 

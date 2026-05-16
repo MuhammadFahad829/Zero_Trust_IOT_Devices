@@ -1,14 +1,29 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings } from 'lucide-react';
+import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings, Layers, Shield } from 'lucide-react';
 
-const navItems = [
-  { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
-  { name: 'Devices', icon: Wifi, tab: 'devices' },
-  { name: 'Threat Vault', icon: Bot, tab: 'threats' },
-  { name: 'Network Map', icon: Network, tab: 'topology' },
-  { name: 'Audit Logs', icon: History, tab: 'logs' },
-  { name: 'Administration', icon: Settings, tab: 'admin' },
+const navSections = [
+  {
+    label: 'Overview',
+    items: [
+      { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
+      { name: 'Devices', icon: Wifi, tab: 'devices' },
+      { name: 'Threat Vault', icon: Bot, tab: 'threats' },
+    ],
+  },
+  {
+    label: 'Network',
+    items: [
+      { name: 'Network Map', icon: Network, tab: 'topology' },
+      { name: 'Audit Logs', icon: History, tab: 'logs' },
+    ],
+  },
+  {
+    label: 'Control',
+    items: [
+      { name: 'Administration', icon: Settings, tab: 'admin' },
+    ],
+  },
 ];
 
 const Sidebar = ({
@@ -57,32 +72,42 @@ const Sidebar = ({
         </div>
       </div>
 
-      <nav className="space-y-3">
-        {navItems.map((item) => {
-          const isActive = activeTab === item.tab;
-          const Icon = item.icon;
-          return (
-            <motion.button
-              key={item.tab}
-              onClick={() => {
-                setActiveTab(item.tab);
-                if (onCloseMobile) onCloseMobile();
-              }}
-              whileHover={{ x: 5, transition: { duration: 0.1 } }}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all relative border ${
-                isActive
-                  ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
-                  : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-900/40 hover:border-gray-800/60'
-              }`}
-            >
-              <Icon size={20} />
-              <span className="font-medium">{item.name}</span>
-              {item.tab === 'threats' && threatCount > 0 && (
-                <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
-              )}
-            </motion.button>
-          );
-        })}
+      <nav className="space-y-5">
+        {navSections.map((section) => (
+          <div key={section.label}>
+            <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
+              {section.label === 'Overview' ? <Layers size={12} /> : section.label === 'Network' ? <Network size={12} /> : <Shield size={12} />}
+              <span>{section.label}</span>
+            </div>
+            <div className="space-y-2">
+              {section.items.map((item) => {
+                const isActive = activeTab === item.tab;
+                const Icon = item.icon;
+                return (
+                  <motion.button
+                    key={item.tab}
+                    onClick={() => {
+                      setActiveTab(item.tab);
+                      if (onCloseMobile) onCloseMobile();
+                    }}
+                    whileHover={{ x: 5, transition: { duration: 0.1 } }}
+                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all relative border ${
+                      isActive
+                        ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
+                        : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-900/40 hover:border-gray-800/60'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span className="font-medium">{item.name}</span>
+                    {item.tab === 'threats' && threatCount > 0 && (
+                      <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
+                    )}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="mt-auto pt-6 border-t border-gray-800/40">

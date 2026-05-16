@@ -4,6 +4,34 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent / "zerotrust.db"
 
 
+def _normalize_segment(segment: str) -> str:
+    if segment is None:
+        return ""
+    normalized = str(segment).strip()
+    if normalized.lower() in ("default", "none", "unassigned", "clear"):
+        return ""
+    return normalized
+
+
+def suggest_segment_for_device(device_type: str = None, vendor: str = None) -> str:
+    text = f"{device_type or ''} {vendor or ''}".lower()
+
+    if any(token in text for token in ("personal", "iphone", "ipad", "macbook", "android", "mobile", "phone")):
+        return "personal"
+    if any(token in text for token in ("private", "randomized", "unknown")):
+        return "private"
+    if any(token in text for token in ("camera", "ipcamera", "security cam", "cctv")):
+        return "camera"
+    if any(token in text for token in ("router", "gateway", "switch", "ap", "access point")):
+        return "network"
+    if any(token in text for token in ("desktop", "laptop", "pc", "computer", "workstation")):
+        return "work"
+    if any(token in text for token in ("iot", "appliance", "speaker", "tv", "smart")):
+        return "iot"
+
+    return "other"
+
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -54,11 +82,36 @@ def init_db():
 def add_or_update_device(ip: str, mac: str, last_seen: float, vendor: str = None, device_type: str = None, status: str = "Blocked", mb_limit: float = 100.0, segment: str = ""):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
+    cur.execute("SELECT segment FROM devices WHERE ip = ?", (ip,))
+    existing = cur.fetchone()
+
+    normalized_segment = _normalize_segment(segment)
+    if normalized_segment:
+        effective_segment = normalized_segment
+    elif existing and existing[0]:
+        effective_segment = existing[0]
+    else:
+        effective_segment = suggest_segment_for_device(device_type, vendor)
+
     cur.execute(
         "INSERT INTO devices (ip, mac, vendor, device_type, status, last_seen, mb_limit, segment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        "ON CONFLICT(ip) DO UPDATE SET mac=excluded.mac, vendor=excluded.vendor, device_type=excluded.device_type, status=excluded.status, last_seen=excluded.last_seen, mb_limit=excluded.mb_limit, segment=excluded.segment",
-        (ip, mac, vendor, device_type, status, last_seen, mb_limit, segment),
+        "ON CONFLICT(ip) DO UPDATE SET mac=excluded.mac, vendor=excluded.vendor, device_type=excluded.device_type, status=excluded.status, last_seen=excluded.last_seen, mb_limit=excluded.mb_limit, segment=COALESCE(NULLIF(excluded.segment, ''), devices.segment)",
+        (ip, mac, vendor, device_type, status, last_seen, mb_limit, effective_segment),
     )
+    conn.commit()
+    conn.close()
+
+
+def mark_all_devices_seen(timestamp: float = None):
+    """Refresh last_seen for every stored device.
+
+    This is used by the no-physical-connection / demo path so existing
+    database devices still appear as active in the dashboard.
+    """
+    timestamp = timestamp or __import__('time').time()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("UPDATE devices SET last_seen = ?", (timestamp,))
     conn.commit()
     conn.close()
 
@@ -104,6 +157,7 @@ def update_device_mb_limit(ip: str, mb_limit: float):
 
 def update_device_segment(ip: str, segment: str):
     """Assign a device to a micro-segmentation group."""
+    segment = _normalize_segment(segment)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("UPDATE devices SET segment = ? WHERE ip = ?", (segment, ip))
@@ -114,12 +168,12 @@ def update_device_segment(ip: str, segment: str):
 def get_device(ip: str):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT ip, mac, vendor, device_type, status, last_seen, mb_limit FROM devices WHERE ip = ?", (ip,))
+    cur.execute("SELECT ip, mac, vendor, device_type, status, last_seen, mb_limit, segment FROM devices WHERE ip = ?", (ip,))
     row = cur.fetchone()
     conn.close()
     if not row:
         return None
-    return {"ip": row[0], "mac": row[1], "vendor": row[2], "device_type": row[3], "status": row[4], "last_seen": row[5], "mb_limit": row[6]}
+    return {"ip": row[0], "mac": row[1], "vendor": row[2], "device_type": row[3], "status": row[4], "last_seen": row[5], "mb_limit": row[6], "segment": row[7]}
 
 
 def get_device_mb_limit(ip: str) -> float:

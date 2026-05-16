@@ -114,6 +114,30 @@ class TrafficMonitor:
             "timestamp": time.time(),
         }
 
+    def inject_sample(self, ip_src: str, bytes_count: int, timestamp: float = None):
+        """Inject a synthetic or replayed traffic sample for a device.
+
+        This keeps the live dashboard responsive when traffic is being replayed
+        from stored database devices instead of sniffed from the network.
+        """
+        if not ip_src:
+            return
+
+        timestamp = timestamp or time.time()
+        bytes_count = max(int(bytes_count or 0), 0)
+
+        with self._lock:
+            self.total_bytes += bytes_count
+            self._window.append((timestamp, bytes_count))
+            self._trim_window(timestamp)
+
+            device_window = self.device_windows.setdefault(ip_src, deque())
+            device_window.append((timestamp, bytes_count))
+            self._trim_device_window(ip_src, timestamp)
+
+            self.device_total_bytes[ip_src] = self.device_total_bytes.get(ip_src, 0) + bytes_count
+            self._append_device_sample(ip_src, timestamp)
+
     def get_device_history(self, ip_src: str) -> list:
         with self._lock:
             history = self.device_history.get(ip_src, deque())

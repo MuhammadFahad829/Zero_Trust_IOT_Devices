@@ -54,6 +54,9 @@ export function getVendorMeta(vendor) {
 export function inferCategory(deviceType, vendor) {
   const text = `${deviceType || ''} ${vendor || ''}`.toLowerCase();
 
+  if (text.includes('personal') || text.includes('personal device')) return 'Personal';
+  if (text.includes('private') || text.includes('private device') || text.includes('randomized')) return 'Private';
+
   if (text.includes('mobile') || text.includes('phone')) return 'Mobile';
   if (text.includes('laptop') || text.includes('desktop') || text.includes('pc')) return 'Computer';
   if (text.includes('camera') || text.includes('ipcamera')) return 'Camera';
@@ -61,6 +64,31 @@ export function inferCategory(deviceType, vendor) {
   if (text.includes('tv') || text.includes('speaker') || text.includes('appliance')) return 'Smart Appliance';
   if (text.includes('iot')) return 'IoT';
   return 'Other';
+}
+
+export function getCategoryMeta(deviceType, vendor) {
+  const category = inferCategory(deviceType, vendor);
+
+  const palette = {
+    Personal: { color: '#8b5cf6', border: '#a78bfa', bg: 'rgba(139,92,246,0.16)' },
+    Private: { color: '#0f766e', border: '#2dd4bf', bg: 'rgba(15,118,110,0.16)' },
+    Other: { color: '#6b7280', border: '#9ca3af', bg: 'rgba(107,114,128,0.14)' },
+    Mobile: { color: '#3b82f6', border: '#60a5fa', bg: 'rgba(59,130,246,0.14)' },
+    Computer: { color: '#2563eb', border: '#60a5fa', bg: 'rgba(37,99,235,0.14)' },
+    Camera: { color: '#ef4444', border: '#f87171', bg: 'rgba(239,68,68,0.14)' },
+    Network: { color: '#14b8a6', border: '#2dd4bf', bg: 'rgba(20,184,166,0.14)' },
+    'Smart Appliance': { color: '#f59e0b', border: '#fbbf24', bg: 'rgba(245,158,11,0.14)' },
+    IoT: { color: '#22c55e', border: '#4ade80', bg: 'rgba(34,197,94,0.14)' },
+  };
+
+  return {
+    category,
+    label: category,
+    ...palette[category],
+    color: palette[category]?.color || '#0f766e',
+    border: palette[category]?.border || '#6b7280',
+    bg: palette[category]?.bg || 'rgba(15,118,110,0.14)',
+  };
 }
 
 export function getDisplayName(device) {
