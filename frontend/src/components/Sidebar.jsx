@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network } from 'lucide-react';
+import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
@@ -8,12 +8,14 @@ const navItems = [
   { name: 'Threat Vault', icon: Bot, tab: 'threats' },
   { name: 'Network Map', icon: Network, tab: 'topology' },
   { name: 'Audit Logs', icon: History, tab: 'logs' },
+  { name: 'Administration', icon: Settings, tab: 'admin' },
 ];
 
 const Sidebar = ({
   activeTab,
   setActiveTab,
   threatCount = 0,
+  deviceCount = 0,
   mobileOpen = false,
   onCloseMobile,
 }) => {
@@ -27,11 +29,11 @@ const Sidebar = ({
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       ].join(' ')}
     >
-      <div className="flex items-center gap-3 mb-16">
+      <div className="flex items-center gap-3 mb-10">
         <motion.div
-            animate={{ scale: [1, 1.06, 1] }}
-            transition={{ repeat: Infinity, duration: 3 }}
-            className="p-2 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30 shadow-[0_0_15px_rgba(34,197,94,0.2)] sentinel-breathe"
+          animate={{ scale: [1, 1.06, 1] }}
+          transition={{ repeat: Infinity, duration: 3 }}
+          className="p-2 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30 shadow-[0_0_15px_rgba(34,197,94,0.2)] sentinel-breathe"
         >
           <ShieldCheck size={28} />
         </motion.div>
@@ -41,7 +43,21 @@ const Sidebar = ({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-3">
+      <div className="mb-6 rounded-2xl border border-gray-800/60 bg-gray-950/40 p-4">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-gray-500">Live overview</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
+            <div className="text-gray-500 text-[11px]">Devices</div>
+            <div className="font-semibold text-gray-100">{deviceCount}</div>
+          </div>
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
+            <div className="text-gray-500 text-[11px]">Threats</div>
+            <div className="font-semibold text-red-300">{threatCount}</div>
+          </div>
+        </div>
+      </div>
+
+      <nav className="space-y-3">
         {navItems.map((item) => {
           const isActive = activeTab === item.tab;
           const Icon = item.icon;
@@ -53,10 +69,10 @@ const Sidebar = ({
                 if (onCloseMobile) onCloseMobile();
               }}
               whileHover={{ x: 5, transition: { duration: 0.1 } }}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all relative ${
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all relative border ${
                 isActive
-                  ? 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
+                  : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-900/40 hover:border-gray-800/60'
               }`}
             >
               <Icon size={20} />
@@ -68,6 +84,11 @@ const Sidebar = ({
           );
         })}
       </nav>
+
+      <div className="mt-auto pt-6 border-t border-gray-800/40">
+        <p className="text-xs text-gray-500 text-center">Zero-Trust IoT Gateway</p>
+        <p className="text-xs text-gray-600 text-center mt-1">v1.0</p>
+      </div>
     </motion.div>
   );
 };

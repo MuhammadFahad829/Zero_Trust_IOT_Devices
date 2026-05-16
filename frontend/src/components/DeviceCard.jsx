@@ -125,7 +125,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange })
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-full text-white font-bold text-xs flex items-center justify-center"
+            className="w-10 h-10 rounded-full text-white font-bold text-xs flex items-center justify-center border border-white/10 shadow-md"
             style={{ backgroundColor: vendor.color }}
             title={vendor.name}
           >
@@ -136,11 +136,15 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange })
             <p className="text-xs text-gray-400">{vendor.name} • {category}</p>
           </div>
         </div>
-        <p className="text-sm text-gray-500 font-mono mb-2">{device.ip}</p>
-        <p className="text-xs text-gray-600 font-mono mb-3">{device.mac}</p>
-        <div className="mb-3 inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-[11px]">
-          <span className={`inline-block w-2 h-2 rounded-full ${online ? 'bg-green-400' : 'bg-gray-500'}`} />
-          {online ? 'Online' : 'Recently Offline'}
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-300 font-mono">{device.ip}</span>
+          <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-400 font-mono">{device.mac}</span>
+          <span className={`px-2 py-1 rounded-full border ${online ? 'border-green-500/30 text-green-300 bg-green-950/20' : 'border-gray-700 text-gray-400 bg-gray-900/40'}`}>
+            {online ? 'Online' : 'Recently Offline'}
+          </span>
+          <span className="px-2 py-1 rounded-full border border-blue-500/20 text-blue-300 bg-blue-950/20">
+            {getDisplayName(device)}
+          </span>
         </div>
       </motion.div>
 
@@ -153,6 +157,12 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange })
           <p className="text-gray-400">Total Usage</p>
           <p className="font-mono text-sm text-gray-100">{formatBytes(device.trafficBytes || 0)}</p>
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+        <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/35">{vendor.name}</span>
+        <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/35">{category}</span>
+        <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/35">Segment: {device.segment || 'default'}</span>
       </div>
 
       {/* Traffic Chart */}
@@ -179,7 +189,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange })
           <button
             onClick={handleSetLimit}
             disabled={savingLimit}
-            className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm inline-flex items-center gap-1"
+            className="btn btn-primary text-sm inline-flex items-center gap-1"
           >
             <Save size={14} />
             {savingLimit ? 'Saving' : 'Set'}
@@ -206,19 +216,19 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange })
         className="flex gap-2 mt-4"
       >
         <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={handleVerify}
-          className="flex-1 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+          className="flex-1 btn btn-success text-sm font-medium flex items-center justify-center gap-2"
         >
           <CheckCircle size={16} />
           {isBlocked ? 'Release' : 'Verify'}
         </motion.button>
         <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={handleBlock}
-          className="flex-1 py-2 bg-gray-800 hover:bg-red-600 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+          className="flex-1 btn btn-ghost text-sm font-medium flex items-center justify-center gap-2"
         >
           <ShieldAlert size={16} />
           Block

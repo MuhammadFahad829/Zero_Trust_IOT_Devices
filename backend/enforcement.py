@@ -1,5 +1,7 @@
 import subprocess
 import shlex
+import json
+from pathlib import Path
 from typing import Dict, Optional
 import database
 
@@ -14,6 +16,14 @@ class EnforcementEngine:
         self.wan = wan_iface
         self.lan = lan_iface
         self.segments = segments or {}
+        # policy_defs holds the raw policy objects from policies.json
+        self.policy_defs: Dict[str, dict] = {}
+        # Attempt to load policies.json from the backend directory
+        try:
+            self.load_policies()
+        except Exception:
+            # best-effort; do not fail initialization if policies missing or malformed
+            pass
 
     def _run_cmd(self, command: str) -> bool:
         """Safely executes a shell command using shlex for input sanitization."""
@@ -118,10 +128,29 @@ class EnforcementEngine:
                     continue
                 seg_map.setdefault(seg, []).append(ip)
 
-            # For each non-empty segment, allow traffic between pairs
+            # For each non-empty segment, prefer interface-based allow if iface configured,
+            # otherwise fall back to per-IP accept rules.
             for seg, ips in seg_map.items():
                 if not seg:
                     continue
+                iface = self.segments.get(seg)
+                if iface:
+                    # Allow all forwarding where both ingress and egress are the segment iface
+                    try:
+                        subprocess.run(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-i", iface, "-o", iface, "-j", "ACCEPT"], check=False, capture_output=True)
+                    except Exception:
+                        pass
+                    # also permit intra-segment host pairs as a fallback
+                    for src in ips:
+                        for dst in ips:
+                            if src == dst:
+                                continue
+                            try:
+                                subprocess.run(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-s", src, "-d", dst, "-j", "ACCEPT"], check=False, capture_output=True)
+                            except Exception:
+                                pass
+                    continue
+                # fallback: insert per-IP accept rules
                 for src in ips:
                     for dst in ips:
                         if src == dst:
@@ -139,6 +168,37 @@ class EnforcementEngine:
         if segment and segment in self.segments:
             return self.segments[segment]
         return self.lan
+
+    def load_policies(self, policies_path: Optional[str] = None) -> None:
+        """Load policies from `policies.json` and populate internal mappings.
+
+        Expected format: { "segments": [{"name":"iot","cidr":"...","vlan_id":100,"iface":"eth0.100"}, ...] }
+        This will set `self.policy_defs[name] = {...}` and, if `iface` present, `self.segments[name] = iface`.
+        """
+        # Resolve default path relative to this file
+        if not policies_path:
+            policies_path = str(Path(__file__).parent / "policies.json")
+
+        p = Path(policies_path)
+        if not p.exists():
+            return
+
+        try:
+            with p.open() as fh:
+                data = json.load(fh)
+        except Exception:
+            return
+
+        segs = data.get("segments", [])
+        for s in segs:
+            name = s.get("name")
+            if not name:
+                continue
+            self.policy_defs[name] = s
+            iface = s.get("iface")
+            if iface:
+                # map segment name to the configured interface
+                self.segments[name] = iface
 
     def allow_device(self, ip: str, segment: Optional[str] = None) -> bool:
         """Insert an ACCEPT rule for a verified IP on the appropriate segment interface."""

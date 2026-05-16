@@ -35,8 +35,22 @@ export default function NetworkTopology({ devices = [] }) {
   const nodeSize = viewportWidth < 640 ? 'w-12 h-12' : 'w-16 h-16';
   const useGrid = devices.length > 12;
 
-  const allowedCount = devices.filter(d => d.status === 'Allowed' || d.status === 'Verified').length;
-  const quarantinedCount = devices.filter(d => d.status === 'Blocked' || d.status === 'Quarantined').length;
+  const allowedCount = devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length;
+  const quarantinedCount = devices.filter((d) => d.status === 'Blocked' || d.status === 'Quarantined').length;
+
+  const orderedDevices = useMemo(() => {
+    return [...devices].sort((a, b) => {
+      const aBlocked = a.status === 'Blocked' || a.status === 'Quarantined';
+      const bBlocked = b.status === 'Blocked' || b.status === 'Quarantined';
+      if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+      const aTraffic = Number(a.trafficMbps || 0);
+      const bTraffic = Number(b.trafficMbps || 0);
+      if (aTraffic !== bTraffic) return bTraffic - aTraffic;
+      const aName = getDisplayName(a);
+      const bName = getDisplayName(b);
+      return aName.localeCompare(bName);
+    });
+  }, [devices]);
 
   const segmentPalette = useMemo(
     () => ['#22c55e', '#3b82f6', '#eab308', '#a855f7', '#f97316', '#06b6d4'],
@@ -63,7 +77,7 @@ export default function NetworkTopology({ devices = [] }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="bg-blue-950/10 border border-blue-500/20 rounded-lg p-4">
+      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-4">
         <div className="flex items-center gap-3">
           <Wifi className="text-blue-400" size={20} />
           <div>
@@ -78,7 +92,7 @@ export default function NetworkTopology({ devices = [] }) {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative h-[360px] sm:h-96 bg-card/40 border border-gray-800/40 rounded-lg p-4 sm:p-6 overflow-hidden">
+      <div ref={containerRef} className="relative h-[360px] sm:h-96 card-soft p-4 sm:p-6 overflow-hidden">
         {/* Center gateway */}
         <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
           <motion.div animate={{ boxShadow: ['0_0_0_0_rgba(59,130,246,0.35)', '0_0_0_18px_rgba(59,130,246,0)'] }} transition={{ repeat: Infinity, duration: 2 }} className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-600 rounded-xl flex items-center justify-center border border-blue-400">
@@ -112,7 +126,7 @@ export default function NetworkTopology({ devices = [] }) {
         )}
 
         {/* Device nodes - circle or grid fallback */}
-        {!useGrid && devices.map((device, idx) => {
+        {!useGrid && orderedDevices.map((device, idx) => {
           const angle = (idx / devices.length) * 2 * Math.PI - Math.PI / 2;
           const x = radius * Math.cos(angle);
           const y = radius * Math.sin(angle);
@@ -163,8 +177,11 @@ export default function NetworkTopology({ devices = [] }) {
         })}
 
         {useGrid && (
-          <div className="absolute inset-4 grid grid-cols-3 sm:grid-cols-4 gap-3 p-2">
-            {devices.map((device) => {
+          <div
+            className="absolute inset-4 grid gap-3 p-2"
+            style={{ gridTemplateColumns: `repeat(${viewportWidth < 640 ? 2 : viewportWidth < 1024 ? 3 : 4}, minmax(0, 1fr))` }}
+          >
+            {orderedDevices.map((device, index) => {
               const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
               const ring = segmentColor(device.segment);
               return (
@@ -174,6 +191,7 @@ export default function NetworkTopology({ devices = [] }) {
                   onMouseLeave={() => setHovered(null)}
                   onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
                   className={`flex flex-col items-center p-2 rounded border ${isBlocked ? 'border-red-600/30 bg-red-900/10' : 'border-green-600/20 bg-green-900/5'}`}
+                  style={{ order: index }}
                 >
                   <div className="w-12 h-12 rounded-md flex items-center justify-center relative">
                     <div className="w-10 h-10 rounded-md flex items-center justify-center border" style={{ borderColor: ring }}>
@@ -204,7 +222,7 @@ export default function NetworkTopology({ devices = [] }) {
         const d = hovered.device;
         return (
           <div style={{ left, top }} className="absolute z-50 pointer-events-auto">
-            <div className="w-56 bg-card/95 border border-gray-700 rounded-lg p-3 text-xs shadow-lg">
+            <div className="w-56 card-soft p-3 text-xs shadow-lg">
               <div className="flex items-start gap-3">
                 <div className="pt-1">{getDeviceIcon(d.vendor)}</div>
                 <div className="flex-1">
@@ -238,14 +256,14 @@ export default function NetworkTopology({ devices = [] }) {
       })()}
 
       <div className="grid grid-cols-2 gap-4 text-sm">
-        <div className="bg-green-950/10 border border-green-500/20 rounded p-3 flex items-center justify-between">
+        <div className="card-soft border border-green-500/20 bg-green-950/10 p-3 flex items-center justify-between">
           <div>
             <p className="text-green-300 font-semibold text-lg">{allowedCount}</p>
             <p className="text-xs text-gray-400">Allowed</p>
           </div>
           <div className="text-green-400"><CheckCircle /></div>
         </div>
-        <div className="bg-red-950/10 border border-red-500/20 rounded p-3 flex items-center justify-between">
+        <div className="card-soft border border-red-500/20 bg-red-950/10 p-3 flex items-center justify-between">
           <div>
             <p className="text-red-300 font-semibold text-lg">{quarantinedCount}</p>
             <p className="text-xs text-gray-400">Quarantined</p>

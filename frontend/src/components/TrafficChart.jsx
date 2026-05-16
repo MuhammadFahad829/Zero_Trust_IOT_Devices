@@ -16,17 +16,24 @@ export default function TrafficChart({ device }) {
 
   const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
   const color = isBlocked ? '#ef4444' : '#22c55e';
+  const latestRate = Number(device?.trafficMbps || 0);
+  const totalUsage = Number(device?.trafficBytes || 0);
 
   if (trafficData.length === 0) {
     return (
-      <div className="mt-4 h-32 bg-gray-900/30 rounded-lg p-3 flex items-center justify-center text-xs text-gray-500 border border-dashed border-gray-700">
-        Waiting for live traffic samples...
+      <div className="mt-4 h-32 bg-gray-900/30 rounded-lg p-3 flex flex-col items-center justify-center text-xs text-gray-500 border border-dashed border-gray-700 gap-1">
+        <span>Waiting for live traffic samples...</span>
+        <span className="font-mono text-[11px] text-gray-600">Current: {latestRate.toFixed(3)} MB/s · Total: {totalUsage} bytes</span>
       </div>
     );
   }
 
   return (
-    <div className="mt-4 h-32 bg-gray-900/30 rounded-lg p-2">
+    <div className="mt-4 h-36 bg-gray-900/30 rounded-lg p-2 border border-gray-800/50">
+      <div className="flex items-center justify-between px-1 pb-2 text-[11px] text-gray-400">
+        <span>Live traffic history</span>
+        <span className="font-mono text-gray-300">{latestRate.toFixed(3)} MB/s</span>
+      </div>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={trafficData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
           <defs>
@@ -47,6 +54,7 @@ export default function TrafficChart({ device }) {
             axisLine={false}
             tickLine={false}
             width={35}
+            domain={[0, 'dataMax']}
           />
           <Tooltip
             contentStyle={{

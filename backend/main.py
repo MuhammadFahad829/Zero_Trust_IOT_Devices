@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # Make local backend modules importable when running `python backend/main.py`
@@ -18,6 +18,7 @@ from orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
 from monitor import TrafficMonitor
 import database
 import time
+from typing import Optional
 
 app = FastAPI(title="Zero-Trust IoT Gateway")
 
@@ -538,6 +539,76 @@ async def startup_tasks():
         asyncio.create_task(_station_poller_loop())
     except Exception:
         pass
+
+
+    def _run_provisioning(apply_vlan: bool = False, apply_dns: bool = False) -> dict:
+        """Run system provisioning steps synchronously. Returns result dict."""
+        root = os.path.dirname(__file__)
+        repo_root = os.path.abspath(os.path.join(root, '..'))
+        scripts_dir = os.path.join(repo_root, 'scripts')
+        policies = os.path.join(root, 'policies.json')
+        result = {"steps": []}
+
+        try:
+            # VLANs
+            if apply_vlan:
+                cmd = [os.path.join(scripts_dir, 'create_vlans.sh'), policies, '--apply']
+                result['steps'].append({'cmd': ' '.join(cmd)})
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            # Generate dnsmasq configs
+            cmd2 = [os.path.join(scripts_dir, 'generate_dnsmasq_conf.sh'), policies, os.path.join(repo_root, 'deploy', 'dnsmasq')]
+            result['steps'].append({'cmd': ' '.join(cmd2)})
+            subprocess.run(cmd2, check=True, capture_output=True, text=True)
+
+            if apply_dns:
+                # copy generated confs into /etc/dnsmasq.d and restart dnsmasq
+                copy_cmd = ['sudo', 'cp', os.path.join(repo_root, 'deploy', 'dnsmasq', '*.conf'), '/etc/dnsmasq.d/']
+                # execute via shell for wildcard copy
+                subprocess.run(' '.join(copy_cmd), shell=True, check=False, capture_output=True, text=True)
+                subprocess.run(['sudo', 'systemctl', 'restart', 'dnsmasq'], check=False, capture_output=True, text=True)
+
+            result['status'] = 'ok'
+        except Exception as e:
+            result['status'] = 'error'
+            result['error'] = str(e)
+
+        return result
+
+
+    @app.post('/provision')
+    async def provision_endpoint(payload: dict = None, authorization: Optional[str] = Header(None)):
+        """Trigger VLAN/DHCP provisioning from the backend/UI.
+
+        Security: If `PROVISION_TOKEN` env var is set, client must send header `authorization: Bearer <token>`.
+        Payload: { "apply_vlan": bool, "apply_dns": bool }
+        """
+        token = os.environ.get('PROVISION_TOKEN')
+        if token:
+            if not authorization or not authorization.lower().startswith('bearer '):
+                raise HTTPException(status_code=401, detail='missing authorization')
+            provided = authorization.split(None, 1)[1].strip()
+            if provided != token:
+                raise HTTPException(status_code=403, detail='invalid token')
+
+        body = payload or {}
+        apply_vlan = bool(body.get('apply_vlan', False))
+        apply_dns = bool(body.get('apply_dns', False))
+
+        # Run provisioning in background to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        fut = loop.run_in_executor(None, _run_provisioning, apply_vlan, apply_dns)
+
+        try:
+            res = await asyncio.wait_for(fut, timeout=300)
+        except asyncio.TimeoutError:
+            # Return accepted and let background continue
+            asyncio.create_task(loop.run_in_executor(None, _run_provisioning, apply_vlan, apply_dns))
+            database.add_log('PROVISION', detail=str({'apply_vlan': apply_vlan, 'apply_dns': apply_dns}))
+            return {'status': 'accepted', 'message': 'provisioning started in background'}
+
+        database.add_log('PROVISION', detail=str({'apply_vlan': apply_vlan, 'apply_dns': apply_dns, 'result': res.get('status')}))
+        return res
 
 
 # --- API Endpoints ---

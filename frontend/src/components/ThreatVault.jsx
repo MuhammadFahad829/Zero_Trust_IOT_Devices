@@ -1,9 +1,15 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
+import { getDisplayName, getVendorMeta, inferCategory } from '../utils/deviceIdentity';
+import { formatBytes } from '../utils/format';
 
 export default function ThreatVault({ devices }) {
-  const quarantinedDevices = devices.filter(d => d.status === 'Blocked' || d.status === 'Quarantined');
+  const quarantinedDevices = [...devices]
+    .filter((d) => d.status === 'Blocked' || d.status === 'Quarantined')
+    .sort((a, b) => Number(b.trafficBytes || 0) - Number(a.trafficBytes || 0));
+
+  const totalBytes = quarantinedDevices.reduce((sum, d) => sum + Number(d.trafficBytes || 0), 0);
 
   const handleRelease = async (ip) => {
     try {
@@ -29,7 +35,7 @@ export default function ThreatVault({ devices }) {
       animate={{ opacity: 1 }}
       className="space-y-6"
     >
-      <div className="glass bg-red-950/20 border border-red-500/30 rounded-lg p-6 mb-2">
+      <div className="card-soft border border-red-500/30 bg-red-950/20 p-6 mb-2">
         <div className="flex items-center gap-3">
           <AlertTriangle className="text-red-500" size={24} />
           <div>
@@ -39,10 +45,24 @@ export default function ThreatVault({ devices }) {
             </p>
           </div>
         </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
+            <div className="text-[11px] uppercase tracking-widest text-gray-500">Quarantined</div>
+            <div className="mt-1 text-lg font-semibold text-red-300">{quarantinedDevices.length}</div>
+          </div>
+          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
+            <div className="text-[11px] uppercase tracking-widest text-gray-500">Traffic held</div>
+            <div className="mt-1 text-lg font-semibold text-red-300 font-mono">{formatBytes(totalBytes)}</div>
+          </div>
+          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
+            <div className="text-[11px] uppercase tracking-widest text-gray-500">Policy state</div>
+            <div className="mt-1 text-lg font-semibold text-red-300">Enforced</div>
+          </div>
+        </div>
       </div>
 
       {quarantinedDevices.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 border border-green-700/30 bg-green-950/10 rounded-lg">
+        <div className="card-soft text-center py-12 text-gray-400 border border-green-700/30 bg-green-950/10">
           <p className="font-medium text-green-300">No active threats detected</p>
           <p className="text-sm mt-1">All monitored devices are currently operating within policy.</p>
         </div>
@@ -54,19 +74,30 @@ export default function ThreatVault({ devices }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.1 }}
-              className={`bg-red-950/10 border border-red-500/40 rounded-lg p-6 shadow-[0_0_20px_rgba(239,68,68,0.1)] crimson-glow pulse-red`}
+              className={`card-soft border border-red-500/40 bg-red-950/10 p-6 shadow-[0_0_20px_rgba(239,68,68,0.1)] crimson-glow pulse-red`}
             >
-              <div className="flex justify-between items-start mb-4">
+              <div className="flex justify-between items-start gap-4 mb-4">
                 <div>
-                  <h4 className="text-lg font-semibold text-red-400">{device.vendor || 'Unknown Device'}</h4>
-                  <p className="text-sm text-gray-400 font-mono">{device.ip}</p>
+                  <h4 className="text-lg font-semibold text-red-300">{getDisplayName(device)}</h4>
+                  <p className="text-sm text-gray-400">{getVendorMeta(device.vendor).name} • {inferCategory(device.device_type, device.vendor)}</p>
+                  <p className="text-sm text-gray-500 font-mono mt-1">{device.ip}</p>
                 </div>
                 <span className="px-3 py-1 bg-red-500 text-white text-xs rounded-full">Quarantined</span>
               </div>
 
-              <div className="bg-gray-900/50 rounded p-3 mb-4">
-                <p className="text-xs text-gray-500 mb-1">MAC Address</p>
-                <p className="text-sm font-mono text-gray-300">{device.mac}</p>
+              <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
+                <div className="card-soft p-3">
+                  <p className="text-gray-500 mb-1">MAC Address</p>
+                  <p className="text-sm font-mono text-gray-300">{device.mac}</p>
+                </div>
+                <div className="card-soft p-3">
+                  <p className="text-gray-500 mb-1">Usage</p>
+                  <p className="text-sm font-mono text-gray-300">{formatBytes(device.trafficBytes || 0)}</p>
+                </div>
+                <div className="card-soft p-3 col-span-2">
+                  <p className="text-gray-500 mb-1">Traffic rate</p>
+                  <p className="text-sm font-mono text-gray-300">{Number(device.trafficMbps || 0).toFixed(3)} MB/s</p>
+                </div>
               </div>
 
               <div className="flex gap-2">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, ShieldAlert, ShieldCheck, Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -6,9 +6,6 @@ import DeviceCard from './components/DeviceCard';
 import AuditLogsTable from './components/AuditLogsTable';
 import ThreatVault from './components/ThreatVault';
 import NetworkTopology from './components/NetworkTopology';
-import AdminPanel from './components/AdminPanel';
-import OfflineBanner from './components/OfflineBanner';
-import OnlineToast from './components/OnlineToast';
 import { containerVariant } from './utils/animations';
 import { inferCategory } from './utils/deviceIdentity';
 
@@ -18,35 +15,6 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [totalBandwidth, setTotalBandwidth] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [backendFailedCount, setBackendFailedCount] = useState(0);
-  const [backendOnline, setBackendOnline] = useState(true);
-  const [showOnlineToast, setShowOnlineToast] = useState(false);
-  const previousBackendOnline = useRef(true);
-
-  const markSuccess = useCallback(() => {
-    setBackendFailedCount(0);
-    setBackendOnline(true);
-  }, []);
-
-  const markFailure = useCallback(() => {
-    setBackendFailedCount((c) => {
-      const next = c + 1;
-      if (next >= 3) setBackendOnline(false);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    const becameOnline = previousBackendOnline.current === false && backendOnline === true;
-    if (becameOnline && backendFailedCount > 0) {
-      setShowOnlineToast(true);
-      const timer = setTimeout(() => setShowOnlineToast(false), 3200);
-      previousBackendOnline.current = backendOnline;
-      return () => clearTimeout(timer);
-    }
-
-    previousBackendOnline.current = backendOnline;
-  }, [backendOnline, backendFailedCount]);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8000/ws');
@@ -124,7 +92,6 @@ const App = () => {
       try {
         const res = await fetch('http://localhost:8000/devices');
         const data = await res.json();
-        markSuccess();
         const deviceList = Array.isArray(data.devices) ? data.devices : [];
         setDevices((prev) => {
           const byIp = new Map(prev.map((p) => [p.ip, p]));
@@ -149,7 +116,6 @@ const App = () => {
         });
       } catch (err) {
         console.error('Failed to fetch devices:', err);
-        markFailure();
       }
     };
 
@@ -167,12 +133,10 @@ const App = () => {
         const res = await fetch('http://localhost:8000/traffic');
         const data = await res.json();
         if (data?.mbps !== undefined) {
-          markSuccess();
           setTotalBandwidth(Number(data.mbps) || 0);
         }
       } catch (err) {
         // ignore noisy fallback errors if websocket is already active
-        markFailure();
       }
     };
 
@@ -186,11 +150,9 @@ const App = () => {
       try {
         const res = await fetch('http://localhost:8000/logs');
         const data = await res.json();
-        markSuccess();
         setLogs(Array.isArray(data.logs) ? data.logs : []);
       } catch (err) {
         console.error('Failed to fetch logs:', err);
-        markFailure();
       }
     };
 
@@ -198,22 +160,11 @@ const App = () => {
     const interval = setInterval(fetchLogs, 5000);
 
     const onProv = () => fetchLogs();
-    const onRetry = () => {
-      // force immediate refetch
-      fetchDevices();
-      fetchTraffic();
-      fetchLogs();
-      setBackendFailedCount(0);
-      setBackendOnline(true);
-    };
-
-    window.addEventListener('retry:backend', onRetry);
     window.addEventListener('provision:complete', onProv);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('provision:complete', onProv);
-      window.removeEventListener('retry:backend', onRetry);
     };
   }, []);
 
@@ -280,11 +231,9 @@ const App = () => {
         />
       )}
 
-      <main className="flex-1 min-w-0 overflow-y-auto p-6 md:p-10">
-        {!backendOnline && <OfflineBanner onRetry={() => window.dispatchEvent(new Event('retry:backend'))} />}
-        {showOnlineToast && <OnlineToast />}
-        <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-6 mb-10">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-10">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
@@ -293,41 +242,32 @@ const App = () => {
               <Menu size={16} />
               Menu
             </button>
-            <p className="text-[11px] uppercase tracking-[0.35em] text-accent-green/80 mb-3">Zero-Trust IoT Gateway</p>
-            <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-[0.95] text-white">
-              Autonomous Security Console
-            </h1>
-            <p className="text-gray-400 mt-3 max-w-xl">
-              Real-time device governance, network segmentation, and policy enforcement across the IoT perimeter.
-            </p>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Autonomous Security Console</h1>
+            <p className="text-gray-400 mt-1">Zero-Trust Network Operations Center</p>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="grid w-full max-w-3xl grid-cols-1 sm:grid-cols-3 gap-3"
-          >
-            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-0">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
               <Activity className="text-accent-blue" size={18} />
-              <div className="min-w-0">
+              <div>
                 <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Live Traffic</span>
-                <span className="block text-lg font-bold font-mono truncate">{totalBandwidth.toFixed(2)} MB/s</span>
+                <span className="text-lg font-bold font-mono">{totalBandwidth.toFixed(2)} MB/s</span>
               </div>
             </div>
 
-            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-0">
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
               <ShieldCheck className="text-accent-green" size={18} />
-              <div className="min-w-0">
+              <div>
                 <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Allowed</span>
-                <span className="block text-lg font-bold truncate">{allowedCount}</span>
+                <span className="text-lg font-bold">{allowedCount}</span>
               </div>
             </div>
 
-            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-0">
+            <div className="bg-card p-4 rounded-xl border border-gray-800/80 shadow-xl flex items-center gap-3 min-w-[170px]">
               <ShieldAlert className="text-accent-red" size={18} />
-              <div className="min-w-0">
+              <div>
                 <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Quarantined</span>
-                <span className="block text-lg font-bold truncate">{quarantinedCount}</span>
+                <span className="text-lg font-bold">{quarantinedCount}</span>
               </div>
             </div>
           </motion.div>
@@ -355,7 +295,6 @@ const App = () => {
         {activeTab === 'threats' && <ThreatVault devices={arrangedDevices} />}
         {activeTab === 'topology' && <NetworkTopology devices={arrangedDevices} />}
         {activeTab === 'logs' && <AuditLogsTable logs={logs} />}
-        {activeTab === 'admin' && <AdminPanel />}
       </main>
     </div>
   );

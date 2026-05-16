@@ -5,8 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices
-ExecStart=/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices/.venv/bin/python /run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices/backend/metrics_exporter.py
+ExecStart=/bin/bash -lc 'cd "/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices" && exec "/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices/.venv/bin/python" "/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices/backend/metrics_exporter.py"'
 Restart=on-failure
 StandardOutput=file:/tmp/zerotrust-exporter.log
 StandardError=file:/tmp/zerotrust-exporter.log
