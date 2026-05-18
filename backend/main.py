@@ -497,7 +497,6 @@ def seed_devices_from_database():
 
 seed_connected_devices_from_neighbors()
 seed_devices_from_database()
-_prime_demo_traffic_from_database()
 
 # --- Anomaly Alert Callback ---
 def on_anomaly_detected(ip: str):
@@ -533,6 +532,12 @@ def on_anomaly_detected(ip: str):
 import threading
 monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
 threading.Thread(target=monitor.start_monitoring, daemon=True).start()
+
+# Prime demo traffic after monitor is available
+try:
+    _prime_demo_traffic_from_database()
+except Exception:
+    pass
 
 
 def _find_ip_for_mac(mac: str) -> str:
