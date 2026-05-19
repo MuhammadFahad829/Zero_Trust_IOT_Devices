@@ -1,0 +1,1 @@
+{"status":"ok","commands":["iptables -A ZT_SEGMENTS -s 10.42.0.174 -d 10.0.0.5 -j ACCEPT","iptables -A ZT_SEGMENTS -s 10.0.0.5 -d 10.42.0.174 -j ACCEPT","iptables -A ZT_SEGMENTS -i wlp2s0.200 -o wlp2s0.200 -j ACCEPT","iptables -A ZT_SEGMENTS -s 10.42.0.132 -d 10.42.0.144 -j ACCEPT","iptables -A ZT_SEGMENTS -s 10.42.0.144 -d 10.42.0.132 -j ACCEPT"]}
