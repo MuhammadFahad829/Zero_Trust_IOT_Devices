@@ -50,5 +50,9 @@ secrets.yml
 # PID files and editor temp
 *.pid
 
-# Allow listing of PR assets
-PR_ASSETS/
+# Allow listing of PR assets (keep in repo)
+#PR_ASSETS/
+
+# Backup and local DB
+*.bak
+backend/zerotrust.db
