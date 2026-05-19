@@ -46,3 +46,9 @@ secrets.yml
 
 # Keep project files tracked
 !docs/**
+
+# PID files and editor temp
+*.pid
+
+# Allow listing of PR assets
+PR_ASSETS/
