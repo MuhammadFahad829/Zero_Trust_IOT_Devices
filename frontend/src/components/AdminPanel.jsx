@@ -7,6 +7,9 @@ export default function AdminPanel({ hotspotActive = true }) {
   const [tokenOpen, setTokenOpen] = useState(false);
   const [provLoading, setProvLoading] = useState(false);
   const [provResult, setProvResult] = useState(null);
+  const [vlanPreview, setVlanPreview] = useState(null);
+  const [segmentPreview, setSegmentPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [applyVlan, setApplyVlan] = useState(true);
   const [applyDns, setApplyDns] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
@@ -250,6 +253,15 @@ export default function AdminPanel({ hotspotActive = true }) {
                 checked={dryRun}
                 onChange={async (e) => {
                   const desired = e.target.checked;
+                  // ask for confirmation
+                  const msg = desired ? 'Enable enforcement dry-run? This will simulate enforcement actions (no iptables changes).' : 'Disable dry-run and apply enforcement actions for real?';
+                  const ok = window.confirm(msg + '\n\nThis action will be recorded in the audit log. Proceed?');
+                  if (!ok) {
+                    // revert checkbox visually
+                    e.preventDefault();
+                    e.target.checked = dryRun;
+                    return;
+                  }
                   setDryRunLoading(true);
                   try {
                     const token = localStorage.getItem('PROVISION_TOKEN') || '';
@@ -337,22 +349,74 @@ export default function AdminPanel({ hotspotActive = true }) {
 
             <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-gray-500">A confirmation dialog will appear before any system changes.</p>
-            <button
-              onClick={() => setProvOpen(true)}
-              disabled={!hotspotActive || (!applyVlan && !applyDns)}
-              title={!hotspotActive ? 'Connect hotspot to enable provisioning' : undefined}
-              className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-            >
-              {provLoading ? (
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-              ) : (
-                '⚙️'
-              )}
-              {provLoading ? 'Provisioning...' : 'Start Provisioning'}
-            </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    setPreviewLoading(true);
+                    setVlanPreview(null);
+                    try {
+                      const token = localStorage.getItem('PROVISION_TOKEN') || '';
+                      const headers = { 'Content-Type': 'application/json' };
+                      if (token) headers['Authorization'] = `Bearer ${token}`;
+                      const body = { segments: Array.from(selectedSegments || []) };
+                      const res = await fetch('http://localhost:8000/provision/preview', { method: 'POST', headers, body: JSON.stringify(body) });
+                      const j = await res.json();
+                      setVlanPreview(j);
+                    } catch (e) {
+                      setVlanPreview({ status: 'error', error: String(e) });
+                    } finally {
+                      setPreviewLoading(false);
+                    }
+                  }}
+                  disabled={!hotspotActive}
+                  className="btn btn-ghost disabled:opacity-50"
+                  title="Preview VLAN commands for selected segments"
+                >
+                  Preview VLANs
+                </button>
+
+                <button
+                  onClick={async () => {
+                    setPreviewLoading(true);
+                    setSegmentPreview(null);
+                    try {
+                      const token = localStorage.getItem('PROVISION_TOKEN') || '';
+                      const headers = { 'Content-Type': 'application/json' };
+                      if (token) headers['Authorization'] = `Bearer ${token}`;
+                      const body = { segments: Array.from(selectedSegments || []) };
+                      const res = await fetch('http://localhost:8000/segments/preview', { method: 'POST', headers, body: JSON.stringify(body) });
+                      const j = await res.json();
+                      setSegmentPreview(j);
+                    } catch (e) {
+                      setSegmentPreview({ status: 'error', error: String(e) });
+                    } finally {
+                      setPreviewLoading(false);
+                    }
+                  }}
+                  disabled={!hotspotActive}
+                  className="btn btn-ghost disabled:opacity-50"
+                  title="Preview iptables segment rules"
+                >
+                  Preview Segment Rules
+                </button>
+
+                <button
+                  onClick={() => setProvOpen(true)}
+                  disabled={!hotspotActive || (!applyVlan && !applyDns)}
+                  title={!hotspotActive ? 'Connect hotspot to enable provisioning' : undefined}
+                  className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {provLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                  ) : (
+                    '⚙️'
+                  )}
+                  {provLoading ? 'Provisioning...' : 'Start Provisioning'}
+                </button>
+              </div>
           </div>
 
           {provResult && (
@@ -370,6 +434,24 @@ export default function AdminPanel({ hotspotActive = true }) {
               <pre className="text-xs text-gray-300 bg-gray-800/50 rounded p-2 overflow-auto max-h-40 font-mono">
                 {JSON.stringify(provResult.data || provResult.error, null, 2)}
               </pre>
+            </div>
+          )}
+          {/* Previews */}
+          {(vlanPreview || segmentPreview) && (
+            <div className="mt-4 p-3 rounded-lg bg-gray-800/40 border border-gray-700/40">
+              {previewLoading && <div className="text-xs text-gray-400 mb-2">Loading preview...</div>}
+              {vlanPreview && (
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-gray-200 mb-1">VLAN Preview</div>
+                  <pre className="text-xs text-gray-300 bg-gray-900/40 rounded p-2 overflow-auto max-h-40 font-mono">{vlanPreview.vlan_preview || JSON.stringify(vlanPreview, null, 2)}</pre>
+                </div>
+              )}
+              {segmentPreview && (
+                <div>
+                  <div className="text-sm font-semibold text-gray-200 mb-1">Segment Rules Preview</div>
+                  <pre className="text-xs text-gray-300 bg-gray-900/40 rounded p-2 overflow-auto max-h-40 font-mono">{Array.isArray(segmentPreview.commands) ? segmentPreview.commands.join('\n') : JSON.stringify(segmentPreview, null, 2)}</pre>
+                </div>
+              )}
             </div>
           )}
         </motion.div>
