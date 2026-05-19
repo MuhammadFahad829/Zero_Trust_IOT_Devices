@@ -893,6 +893,108 @@ async def startup_tasks():
         return res
 
 
+    @app.post('/provision/preview')
+    async def provision_preview(payload: dict = None, authorization: Optional[str] = Header(None)):
+        """Return a preview of VLAN commands (create_vlans.sh output) for the selected segments.
+
+        Payload: { "segments": ["name1","name2"] }
+        Requires PROVISION_TOKEN if configured.
+        """
+        token = os.environ.get('PROVISION_TOKEN')
+        if token:
+            if not authorization or not authorization.lower().startswith('bearer '):
+                raise HTTPException(status_code=401, detail='missing authorization')
+            provided = authorization.split(None, 1)[1].strip()
+            if provided != token:
+                raise HTTPException(status_code=403, detail='invalid token')
+
+        body = payload or {}
+        segments = body.get('segments')
+        temp_path = None
+        root = os.path.dirname(__file__)
+        repo_root = os.path.abspath(os.path.join(root, '..'))
+        scripts_dir = os.path.join(repo_root, 'scripts')
+        policies = os.path.join(root, 'policies.json')
+
+        try:
+            if segments and isinstance(segments, (list, tuple)):
+                p = Path(__file__).parent / 'policies.json'
+                with p.open() as fh:
+                    data = json.load(fh)
+                segs = data.get('segments', [])
+                filtered = [s for s in segs if s.get('name') in segments]
+                data_copy = dict(data)
+                data_copy['segments'] = filtered
+                import tempfile
+
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
+                tmp.write(json.dumps(data_copy, indent=2).encode())
+                tmp.flush()
+                tmp.close()
+                temp_path = tmp.name
+                policies_to_use = temp_path
+            else:
+                policies_to_use = policies
+
+            create_script = os.path.join(scripts_dir, 'create_vlans.sh')
+            cmd = [create_script, policies_to_use]
+            proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            out = proc.stdout
+            err = proc.stderr
+            return {'status': 'ok', 'vlan_preview': out, 'stderr': err}
+        except Exception as e:
+            return {'status': 'error', 'error': str(e)}
+        finally:
+            try:
+                if temp_path:
+                    os.unlink(temp_path)
+            except Exception:
+                pass
+
+
+    @app.post('/segments/preview')
+    async def preview_segments(payload: dict = None):
+        """Return the iptables commands that would be applied for current (or filtered) segments.
+
+        Payload: { "segments": ["name1","name2"] } optional. If segments provided, a temporary
+        filtered policies file will be used to populate iface mappings for the preview.
+        """
+        body = payload or {}
+        segments = body.get('segments')
+        temp_path = None
+        try:
+            if segments and isinstance(segments, (list, tuple)):
+                p = Path(__file__).parent / 'policies.json'
+                with p.open() as fh:
+                    data = json.load(fh)
+                segs = data.get('segments', [])
+                filtered = [s for s in segs if s.get('name') in segments]
+                data_copy = dict(data)
+                data_copy['segments'] = filtered
+                import tempfile
+
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
+                tmp.write(json.dumps(data_copy, indent=2).encode())
+                tmp.flush()
+                tmp.close()
+                temp_path = tmp.name
+                # load policies from temp path for preview
+                enforcer.load_policies(temp_path)
+
+            cmds = enforcer.build_segment_policy_commands(policies_path=temp_path if temp_path else None)
+            return {'status': 'ok', 'commands': cmds}
+        except Exception as e:
+            return {'status': 'error', 'error': str(e)}
+        finally:
+            try:
+                # reload default policies to avoid side effects
+                enforcer.load_policies()
+                if temp_path:
+                    os.unlink(temp_path)
+            except Exception:
+                pass
+
+
 @app.get('/enforcer/dryrun')
 async def get_enforcer_dryrun():
     try:

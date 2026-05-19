@@ -138,7 +138,20 @@ class EnforcementEngine:
             self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", "53", "-j", "REJECT", "--reject-with", "icmp-port-unreachable"], check=False, capture_output=True)
             self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
             # proactively block traffic headed to common public DNS resolvers (prevents device from bypassing local DNS)
-            public_resolvers = ["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "149.112.112.112"]
+            # Block common public DNS resolvers (IPv4)
+            public_resolvers = [
+                "8.8.8.8",
+                "8.8.4.4",
+                "1.1.1.1",
+                "1.0.0.1",
+                "9.9.9.9",
+                "149.112.112.112",
+                # additional well-known resolvers
+                "208.67.222.222",
+                "208.67.220.220",
+                "64.6.64.6",
+                "64.6.65.6",
+            ]
             for r in public_resolvers:
                 self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-d", r, "-p", "udp", "--dport", "53", "-j", "REJECT", "--reject-with", "icmp-port-unreachable"], check=False, capture_output=True)
                 self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-d", r, "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
@@ -157,6 +170,18 @@ class EnforcementEngine:
                 # block IPv6 DNS (port 53) and common proxy ports
                 self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", "53", "-j", "DROP"], check=False, capture_output=True)
                 self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+                # IPv6 public resolvers to proactively block (common anycast / provider addresses)
+                ipv6_resolvers = [
+                    "2001:4860:4860::8888",
+                    "2001:4860:4860::8844",
+                    "2606:4700:4700::1111",
+                    "2606:4700:4700::1001",
+                    "2620:fe::fe",
+                    "2620:fe::9",
+                ]
+                for r6 in ipv6_resolvers:
+                    self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-d", r6, "-p", "udp", "--dport", "53", "-j", "DROP"], check=False, capture_output=True)
+                    self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-d", r6, "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
                 for p in ["3128", "8080", "8888", "8000", "1080"]:
                     self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", p, "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
                     self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", p, "-j", "DROP"], check=False, capture_output=True)
@@ -225,6 +250,52 @@ class EnforcementEngine:
             return True
         except Exception:
             return False
+
+    def build_segment_policy_commands(self, policies_path: Optional[str] = None) -> list:
+        """Construct the list of iptables commands that would be applied for segment policies.
+
+        This returns command strings and does NOT execute anything. If `policies_path` is
+        provided, it will load policies from that path first (temporary preview).
+        """
+        # optionally load alternate policies for preview only
+        if policies_path:
+            try:
+                self.load_policies(policies_path)
+            except Exception:
+                pass
+
+        cmds = []
+        try:
+            devices = database.list_devices()
+            seg_map = {}
+            for d in devices:
+                seg = d.get("segment") or ""
+                ip = d.get("ip")
+                if not ip:
+                    continue
+                seg_map.setdefault(seg, []).append(ip)
+
+            for seg, ips in seg_map.items():
+                if not seg:
+                    continue
+                iface = self.segments.get(seg)
+                if iface:
+                    cmds.append(f"iptables -A ZT_SEGMENTS -i {shlex.quote(iface)} -o {shlex.quote(iface)} -j ACCEPT")
+                    for src in ips:
+                        for dst in ips:
+                            if src == dst:
+                                continue
+                            cmds.append(f"iptables -A ZT_SEGMENTS -s {shlex.quote(src)} -d {shlex.quote(dst)} -j ACCEPT")
+                    continue
+                for src in ips:
+                    for dst in ips:
+                        if src == dst:
+                            continue
+                        cmds.append(f"iptables -A ZT_SEGMENTS -s {shlex.quote(src)} -d {shlex.quote(dst)} -j ACCEPT")
+        except Exception:
+            pass
+
+        return cmds
 
     def _iface_for_segment(self, segment: Optional[str]) -> str:
         if segment and segment in self.segments:
