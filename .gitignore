@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.env
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+frontend/build/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+
+# Logs and temp
+*.log
+/tmp/
+/var/tmp/
+
+# Trash created by cleanup script
+/trash/
+
+# IDE
+.idea/
+
+# Coverage
+.coverage
+coverage.xml
+
+# Others
+dist/
+*.egg-info/
+
+# Ignore local secrets
+secrets.yml
+
+# Keep project files tracked
+!docs/**

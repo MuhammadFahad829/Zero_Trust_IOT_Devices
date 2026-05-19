@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
 # Make local backend modules importable when running `python backend/main.py`
@@ -298,7 +299,8 @@ app.add_middleware(
 
 
 # Initialize Engines (update interfaces as needed)
-enforcer = EnforcementEngine(wan_iface=WAN_INTERFACE, lan_iface=LAN_INTERFACE)
+DRY_RUN = os.environ.get("ZT_DRY_RUN", "0").strip().lower() in ("1", "true", "yes", "on")
+enforcer = EnforcementEngine(wan_iface=WAN_INTERFACE, lan_iface=LAN_INTERFACE, dry_run=DRY_RUN)
 enforcer.setup_gateway()
 
 # Initialize DB
@@ -369,6 +371,70 @@ scout.start_sniffing()
 
 # Cursor for deterministic round-robin probing across LAN hosts.
 PROBE_CURSOR = 0
+
+# In-memory map for auto-enforced blocks: ip -> previous_status
+ENFORCED_BLOCKS = {}
+
+
+async def _enforcement_loop():
+    """Background loop: ensure devices that go offline are blocked and restore when online."""
+    await asyncio.sleep(2)
+    while True:
+        try:
+            rows = database.list_devices()
+            for row in rows:
+                ip = row.get('ip')
+                if not ip:
+                    continue
+                last_seen = row.get('last_seen')
+                online = _is_device_online(last_seen)
+                seg = row.get('segment') or ''
+
+                # If device is offline and not already enforced, block it
+                if not online and ip not in ENFORCED_BLOCKS:
+                    try:
+                        ENFORCED_BLOCKS[ip] = row.get('status') or 'Blocked'
+                        enforcer.block_device(ip, segment=seg)
+                        database.add_or_update_device(ip, row.get('mac', ''), time.time(), vendor=row.get('vendor'), device_type=row.get('device_type'), status='Quarantined', mb_limit=row.get('mb_limit', 100.0), segment=seg)
+                        database.add_log('AUTO_BLOCK', ip=ip, detail=f'auto-blocked (offline)')
+                        try:
+                            await manager.broadcast({'event': 'STATUS_UPDATE', 'ip': ip, 'status': 'Quarantined'})
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                # If device is online and was auto-blocked, restore previous status
+                if online and ip in ENFORCED_BLOCKS:
+                    prev = ENFORCED_BLOCKS.pop(ip, None)
+                    try:
+                        # If previously allowed, restore allow rule; otherwise leave blocked state to user's decision
+                        if prev and prev.lower() == 'allowed':
+                            enforcer.allow_device(ip, segment=seg)
+                            new_status = 'Allowed'
+                        else:
+                            # remove enforced block but don't auto-allow unknown devices
+                            new_status = prev or 'Blocked'
+                        database.add_or_update_device(ip, row.get('mac', ''), time.time(), vendor=row.get('vendor'), device_type=row.get('device_type'), status=new_status, mb_limit=row.get('mb_limit', 100.0), segment=seg)
+                        database.add_log('AUTO_UNBLOCK', ip=ip, detail=f'restored status={new_status}')
+                        try:
+                            await manager.broadcast({'event': 'STATUS_UPDATE', 'ip': ip, 'status': new_status})
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+        except Exception:
+            # swallow transient errors
+            pass
+        await asyncio.sleep(10)
+
+
+@app.on_event('startup')
+async def _start_background_tasks():
+    try:
+        asyncio.create_task(_enforcement_loop())
+    except Exception:
+        pass
 
 
 def seed_connected_devices_from_neighbors():
@@ -716,17 +782,25 @@ async def startup_tasks():
         repo_root = os.path.abspath(os.path.join(root, '..'))
         scripts_dir = os.path.join(repo_root, 'scripts')
         policies = os.path.join(root, 'policies.json')
+        # support optional filtered segments passed via env var PROVISION_SEGMENTS (json list)
+        # or via temporary policies file if provided in caller (passed via os.environ)
+        temp_policies = os.environ.get('PROVISION_POLICIES_PATH')
         result = {"steps": []}
 
         try:
             # VLANs
+            policies_to_use = policies
+            # If caller provided a temp policies file, use it (PROVISION_POLICIES_PATH)
+            if temp_policies:
+                policies_to_use = temp_policies
+
             if apply_vlan:
-                cmd = [os.path.join(scripts_dir, 'create_vlans.sh'), policies, '--apply']
+                cmd = [os.path.join(scripts_dir, 'create_vlans.sh'), policies_to_use, '--apply']
                 result['steps'].append({'cmd': ' '.join(cmd)})
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             # Generate dnsmasq configs
-            cmd2 = [os.path.join(scripts_dir, 'generate_dnsmasq_conf.sh'), policies, os.path.join(repo_root, 'deploy', 'dnsmasq')]
+            cmd2 = [os.path.join(scripts_dir, 'generate_dnsmasq_conf.sh'), policies_to_use, os.path.join(repo_root, 'deploy', 'dnsmasq')]
             result['steps'].append({'cmd': ' '.join(cmd2)})
             subprocess.run(cmd2, check=True, capture_output=True, text=True)
 
@@ -763,9 +837,33 @@ async def startup_tasks():
         body = payload or {}
         apply_vlan = bool(body.get('apply_vlan', False))
         apply_dns = bool(body.get('apply_dns', False))
+        segments = body.get('segments')
 
         # Run provisioning in background to avoid blocking the event loop
         loop = asyncio.get_event_loop()
+        # If segments provided, write a temporary policies file filtered to those segments
+        temp_path = None
+        if segments and isinstance(segments, (list, tuple)):
+            try:
+                p = Path(__file__).parent / 'policies.json'
+                with p.open() as fh:
+                    data = json.load(fh)
+                segs = data.get('segments', [])
+                filtered = [s for s in segs if s.get('name') in segments]
+                data_copy = dict(data)
+                data_copy['segments'] = filtered
+                import tempfile
+
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
+                tmp.write(json.dumps(data_copy, indent=2).encode())
+                tmp.flush()
+                tmp.close()
+                temp_path = tmp.name
+                # make available to _run_provisioning via env var
+                os.environ['PROVISION_POLICIES_PATH'] = temp_path
+            except Exception:
+                temp_path = None
+
         fut = loop.run_in_executor(None, _run_provisioning, apply_vlan, apply_dns)
 
         try:
@@ -777,7 +875,42 @@ async def startup_tasks():
             return {'status': 'accepted', 'message': 'provisioning started in background'}
 
         database.add_log('PROVISION', detail=str({'apply_vlan': apply_vlan, 'apply_dns': apply_dns, 'result': res.get('status')}))
+        # cleanup temp file if created
+        try:
+            if temp_path:
+                os.unlink(temp_path)
+                os.environ.pop('PROVISION_POLICIES_PATH', None)
+        except Exception:
+            pass
         return res
+
+
+@app.get('/enforcer/dryrun')
+async def get_enforcer_dryrun():
+    try:
+        return {"dry_run": bool(enforcer.dry_run)}
+    except Exception:
+        return {"dry_run": False}
+
+
+@app.post('/enforcer/dryrun')
+async def set_enforcer_dryrun(payload: dict = None, authorization: Optional[str] = Header(None)):
+    # Require PROVISION_TOKEN if configured
+    token = os.environ.get('PROVISION_TOKEN')
+    if token:
+        if not authorization or not authorization.startswith('Bearer '):
+            raise HTTPException(status_code=401, detail='Unauthorized')
+        provided = authorization.split(' ', 1)[1]
+        if provided != token:
+            raise HTTPException(status_code=401, detail='Unauthorized')
+
+    body = payload or {}
+    dry = bool(body.get('dry_run', False))
+    try:
+        enforcer.set_dry_run(dry)
+        return {"status": "ok", "dry_run": bool(enforcer.dry_run)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 # --- API Endpoints ---
@@ -885,6 +1018,89 @@ def api_list_devices():
             "trafficHistory": live.get("history", []),
         })
     return {"devices": devices}
+
+
+@app.get('/segments')
+def api_list_segments():
+    """Return available segmentation policies and assigned segments."""
+    # Load policies.json if present
+    policies = {}
+    try:
+        import json as _json
+        p = Path(__file__).parent / 'policies.json'
+        if p.exists():
+            with p.open() as fh:
+                policies = _json.load(fh)
+    except Exception:
+        policies = {}
+
+    # Collect unique assigned segments from database
+    assigned = sorted({d.get('segment') or '' for d in database.list_devices()})
+    return {
+        'policies': policies,
+        'assigned_segments': assigned,
+    }
+
+
+@app.get('/policies')
+def api_get_policies():
+    p = Path(__file__).parent / 'policies.json'
+    if not p.exists():
+        return {'policies': {}}
+    try:
+        with p.open() as fh:
+            data = json.load(fh)
+        return {'policies': data}
+    except Exception as e:
+        return {'error': str(e)}
+
+
+@app.post('/policies')
+def api_set_policies(payload: dict, authorization: Optional[str] = Header(None)):
+    token = os.environ.get('PROVISION_TOKEN')
+    if token:
+        if not authorization or not authorization.lower().startswith('bearer '):
+            raise HTTPException(status_code=401, detail='missing authorization')
+        provided = authorization.split(None, 1)[1].strip()
+        if provided != token:
+            raise HTTPException(status_code=403, detail='invalid token')
+
+    p = Path(__file__).parent / 'policies.json'
+    backup = p.with_suffix('.json.bak')
+    try:
+        # write backup
+        if p.exists():
+            p.replace(backup)
+        with p.open('w') as fh:
+            json.dump(payload, fh, indent=2)
+        # reload policies into enforcer
+        try:
+            enforcer.load_policies()
+            enforcer.apply_segment_policies()
+        except Exception:
+            pass
+        database.add_log('SET_POLICIES', detail='updated policies.json')
+        return {'status': 'ok'}
+    except Exception as e:
+        # attempt to restore backup
+        try:
+            if backup.exists():
+                backup.replace(p)
+        except Exception:
+            pass
+        return {'status': 'error', 'error': str(e)}
+
+
+@app.post('/segments/apply')
+def api_apply_segments():
+    """Force re-apply segment policies to the kernel (iptables)."""
+    try:
+        ok = enforcer.apply_segment_policies()
+        if ok:
+            return {'status': 'ok', 'message': 'segment policies applied'}
+        return {'status': 'error', 'message': 'failed to apply segment policies'}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
 
 
 @app.get('/logs')

@@ -1,57 +1,99 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings, Layers, Shield } from 'lucide-react';
-
-const navSections = [
-  {
-    label: 'Overview',
-    items: [
-      { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
-      { name: 'Devices', icon: Wifi, tab: 'devices' },
-      { name: 'Threat Vault', icon: Bot, tab: 'threats' },
-    ],
-  },
-  {
-    label: 'Network',
-    items: [
-      { name: 'Network Map', icon: Network, tab: 'topology' },
-      { name: 'Audit Logs', icon: History, tab: 'logs' },
-    ],
-  },
-  {
-    label: 'Control',
-    items: [
-      { name: 'Administration', icon: Settings, tab: 'admin' },
-    ],
-  },
+const primaryItems = [
+  { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
+  { name: 'Devices', icon: Wifi, tab: 'devices' },
 ];
+
+const extraItems = [
+  { name: 'Threat Vault', icon: Bot, tab: 'threats', section: 'Overview' },
+  { name: 'Network Map', icon: Network, tab: 'topology', section: 'Network' },
+  { name: 'Audit Logs', icon: History, tab: 'logs', section: 'Network' },
+  { name: 'Administration', icon: Settings, tab: 'admin', section: 'Control' },
+];
+
+const MoreSection = ({ extraItems = [], activeTab, setActiveTab, onCloseMobile, threatCount = 0, hotspotActive = true }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <div className="mb-2">
+        <button
+          type="button"
+          onClick={() => setOpen((s) => !s)}
+          aria-expanded={open}
+          className="w-full flex items-center justify-between gap-3 px-4 py-2 rounded-lg text-sm bg-gray-900/10 border border-gray-800/40"
+        >
+          <span>More</span>
+          <span className="text-xs text-gray-400">{open ? 'Hide' : 'Show'}</span>
+        </button>
+      </div>
+
+      {open && (
+        <div className="space-y-2">
+          {extraItems.map((item) => {
+            const isActive = activeTab === item.tab;
+            const Icon = item.icon;
+            const disabled = (item.tab === 'topology' || item.tab === 'admin') && !hotspotActive;
+            return (
+              <button
+                key={item.tab}
+                onClick={() => {
+                  if (disabled) return;
+                  setActiveTab(item.tab);
+                  if (onCloseMobile) onCloseMobile();
+                }}
+                title={disabled ? 'Connect hotspot to enable' : undefined}
+                aria-current={isActive ? 'page' : undefined}
+                aria-disabled={disabled ? 'true' : undefined}
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
+                  isActive
+                    ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
+                    : disabled
+                      ? 'text-gray-600 bg-gray-900/10 border-gray-800/30 cursor-not-allowed'
+                      : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
+                }`}
+              >
+                <Icon size={18} />
+                <span className="font-medium">{item.name}</span>
+                {item.tab === 'threats' && threatCount > 0 && (
+                  <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Sidebar = ({
   activeTab,
   setActiveTab,
   threatCount = 0,
   deviceCount = 0,
+  deviceSegmentFilters = [],
+  deviceSegmentFilter = 'all',
+  setDeviceSegmentFilter = () => {},
   mobileOpen = false,
   onCloseMobile,
+  hotspotActive = true,
 }) => {
   return (
-    <motion.div
-      initial={{ x: -120, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
+    <div
       className={[
         'w-64 bg-card h-full flex flex-col border-r border-gray-800/50 p-6',
         'fixed md:static top-0 left-0 z-40 transition-transform duration-300',
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       ].join(' ')}
+      role="navigation"
+      aria-label="Main sidebar navigation"
     >
       <div className="flex items-center gap-3 mb-10">
-        <motion.div
-          animate={{ scale: [1, 1.06, 1] }}
-          transition={{ repeat: Infinity, duration: 3 }}
-          className="p-2 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30 shadow-[0_0_15px_rgba(34,197,94,0.2)] sentinel-breathe"
-        >
+        <div className="p-2 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
           <ShieldCheck size={28} />
-        </motion.div>
+        </div>
         <div>
           <h2 className="text-xl font-bold tracking-tight">Sentinel.ai</h2>
           <span className="text-xs text-gray-500">Autonomous Security</span>
@@ -73,48 +115,72 @@ const Sidebar = ({
       </div>
 
       <nav className="space-y-5">
-        {navSections.map((section) => (
-          <div key={section.label}>
-            <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
-              {section.label === 'Overview' ? <Layers size={12} /> : section.label === 'Network' ? <Network size={12} /> : <Shield size={12} />}
-              <span>{section.label}</span>
-            </div>
-            <div className="space-y-2">
-              {section.items.map((item) => {
-                const isActive = activeTab === item.tab;
-                const Icon = item.icon;
-                return (
-                  <motion.button
-                    key={item.tab}
-                    onClick={() => {
-                      setActiveTab(item.tab);
-                      if (onCloseMobile) onCloseMobile();
-                    }}
-                    whileHover={{ x: 5, transition: { duration: 0.1 } }}
-                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all relative border ${
-                      isActive
-                        ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
-                        : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-900/40 hover:border-gray-800/60'
-                    }`}
-                  >
-                    <Icon size={20} />
-                    <span className="font-medium">{item.name}</span>
-                    {item.tab === 'threats' && threatCount > 0 && (
-                      <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
-                    )}
-                  </motion.button>
-                );
-              })}
-            </div>
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
+            <Layers size={12} />
+            <span>Overview</span>
           </div>
-        ))}
+          <div className="space-y-2">
+            {primaryItems.map((item) => {
+              const isActive = activeTab === item.tab;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.tab}
+                  onClick={() => {
+                    setActiveTab(item.tab);
+                    if (onCloseMobile) onCloseMobile();
+                  }}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
+                    isActive
+                      ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
+                      : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
+                  }`}
+                >
+                  <Icon size={20} />
+                  <span className="font-medium">{item.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <MoreSection
+            extraItems={extraItems}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onCloseMobile={onCloseMobile}
+            threatCount={threatCount}
+            hotspotActive={hotspotActive}
+          />
       </nav>
+
+      {deviceSegmentFilters && deviceSegmentFilters.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
+            <Layers size={12} />
+            <span>Segments</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {deviceSegmentFilters.slice(0, 10).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setDeviceSegmentFilter(f.key)}
+                className={`px-3 py-1 rounded-full text-[11px] border ${deviceSegmentFilter === f.key ? 'bg-accent-blue/10 border-accent-blue/20 text-accent-blue' : 'bg-gray-900/30 border-gray-800/60 text-gray-300 hover:bg-gray-900/50'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-auto pt-6 border-t border-gray-800/40">
         <p className="text-xs text-gray-500 text-center">Zero-Trust IoT Gateway</p>
         <p className="text-xs text-gray-600 text-center mt-1">v1.0</p>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

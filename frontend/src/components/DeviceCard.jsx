@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Monitor, Smartphone, ShieldAlert, CheckCircle, Cpu, Camera, Router, Gauge, Save } from 'lucide-react';
-import { motion } from 'framer-motion';
-import TrafficChart from './TrafficChart';
-import { cardVariant } from '../utils/animations';
+import React, { useEffect, useMemo, useState, Suspense, lazy } from 'react';
+import { Monitor, Smartphone, ShieldAlert, CheckCircle, Cpu, Camera, Router, Gauge, Save, ChevronDown, ChevronUp } from 'lucide-react';
+const TrafficChart = lazy(() => import('./TrafficChart'));
 import { formatBytes } from '../utils/format';
 import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '../utils/deviceIdentity';
 
@@ -27,7 +25,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   const category = useMemo(() => inferCategory(device.device_type, device.vendor), [device.device_type, device.vendor]);
   const categoryMeta = useMemo(() => getCategoryMeta(device.device_type, device.vendor), [device.device_type, device.vendor]);
   const displayName = useMemo(() => getDisplayName(device), [device]);
-  const online = Boolean(device.online);
+  const online = Boolean(device.online); // Check if device is online
   const [limitInput, setLimitInput] = useState(String(device.mb_limit ?? 100));
   const [savingLimit, setSavingLimit] = useState(false);
   const [segmentInput, setSegmentInput] = useState(device.segment || '');
@@ -38,6 +36,22 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
     return Math.min((used / lim) * 100, 100);
   }, [device.trafficMB, device.mb_limit]);
 
+  const [openDetails, setOpenDetails] = useState(false);
+  const storageKey = `device:collapsed:${device.ip}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw !== null) return raw === '1';
+    } catch (e) {}
+    return !!compact;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, collapsed ? '1' : '0');
+    } catch (e) {}
+  }, [collapsed, storageKey]);
+
   useEffect(() => {
     setLimitInput(String(device.mb_limit ?? 100));
   }, [device.mb_limit]);
@@ -47,6 +61,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   }, [device.segment]);
 
   const handleVerify = async () => {
+    if (!online) return; // Prevent action if device is offline
     try {
       await fetch(`http://localhost:8000/allow/${device.ip}`, { method: 'POST' });
       if (onVerify) onVerify(device.ip);
@@ -56,6 +71,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   };
 
   const handleBlock = async () => {
+    if (!online) return; // Prevent action if device is offline
     try {
       await fetch(`http://localhost:8000/block/${device.ip}`, { method: 'POST' });
       if (onBlock) onBlock(device.ip);
@@ -65,6 +81,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   };
 
   const handleSetLimit = async () => {
+    if (!online) return; // Prevent action if device is offline
     const parsed = Number(limitInput);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
 
@@ -80,6 +97,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   };
 
   const handleSetSegment = async (nextSegment) => {
+    if (!online) return; // Prevent action if device is offline
     const value = String(nextSegment ?? segmentInput).trim();
     const normalized = value || 'unassigned';
 
@@ -113,57 +131,42 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   const autoAssignSegment = suggestedSegments[0] || 'other';
 
   return (
-    <motion.div
-      layout
-      variants={cardVariant}
-      initial="hidden"
-      animate={device.alert ? 'alert' : 'visible'}
-      whileHover={{ scale: compact ? 1.01 : 1.02 }}
-      className={`border transition-all duration-300 overflow-hidden relative bg-card/70 backdrop-blur-sm ${compact ? 'p-4 rounded-xl' : 'p-6 rounded-2xl'} ${
-        isBlocked
-          ? 'border-red-500/50 shadow-[0_10px_40px_rgba(239,68,68,0.08)] crimson-glow'
-          : 'border-green-500/30 shadow-[0_10px_40px_rgba(34,197,94,0.06)] neon-green-glow'
-      } ${device.alert ? 'pulse-red' : ''}`}
-    >
-      {isBlocked && (
-        <motion.div
-          animate={{ x: [0, 4, -4, 0] }}
-          transition={{ repeat: Infinity, duration: 0.4 }}
-          className="absolute inset-0 border-2 border-red-500/20 rounded-2xl pointer-events-none"
-        />
-      )}
+    <div className={`border transition-all duration-200 overflow-hidden relative bg-card/70 ${compact ? 'p-4 rounded-xl' : 'p-6 rounded-2xl'} ${
+      isBlocked ? 'border-red-500/40' : 'border-green-500/20'
+    } ${device.alert ? 'pulse-red' : ''}`}>
+      {isBlocked && <div className="absolute inset-0 border-2 border-red-500/20 rounded-2xl pointer-events-none" />}
 
       <div className={`flex justify-between items-start ${compact ? 'mb-3' : 'mb-4'}`}>
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className={`${compact ? 'p-2.5 rounded-xl' : 'p-3 rounded-lg'} ${
-            isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
-          }`}
-          style={!isBlocked ? { backgroundColor: categoryMeta.bg, color: categoryMeta.color } : undefined}
-        >
+        <div className={`${compact ? 'p-2.5 rounded-xl' : 'p-3 rounded-lg'} ${
+          isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
+        }`} style={!isBlocked ? { backgroundColor: categoryMeta.bg, color: categoryMeta.color } : undefined}>
           {getCategoryIcon(category)}
-        </motion.div>
-        <motion.span
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-          className={`px-3 py-1 rounded-full ${compact ? 'text-[10px]' : 'text-xs'} font-bold ${
-            isBlocked
-              ? 'bg-red-500 text-white'
-              : 'bg-green-500/20 text-green-400'
-          }`}
-        >
-          {device.status}
-        </motion.span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex items-center gap-2 ${compact ? 'text-[10px]' : 'text-xs'} font-semibold`}>
+            <span
+              aria-hidden
+              className={`h-2.5 w-2.5 rounded-full ${isBlocked ? 'bg-red-500' : 'bg-green-400'}`}
+              title={device.status}
+            />
+            <span className={`${isBlocked ? 'text-red-300' : 'text-green-200'}`}>{isBlocked ? 'Quarantined' : (device.status || 'Unknown')}</span>
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setCollapsed((s) => !s)} aria-label={collapsed ? 'Expand card' : 'Collapse card'} className="p-1 rounded hover:bg-white/5">
+              {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </button>
+            <button type="button" onClick={handleVerify} aria-label={isBlocked ? 'Release device' : 'Allow device'} className="p-1 rounded hover:bg-white/5">
+              <CheckCircle size={14} className="text-green-300" />
+            </button>
+            <button type="button" onClick={handleBlock} aria-label="Block device" className="p-1 rounded hover:bg-white/5">
+              <ShieldAlert size={14} className="text-red-400" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.15 }}
-      >
+      <div>
         <div className="flex items-center gap-3">
           <div
             className={`${compact ? 'w-9 h-9' : 'w-10 h-10'} rounded-full text-white font-bold text-xs flex items-center justify-center border border-white/10 shadow-md`}
@@ -181,13 +184,13 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-300 font-mono">{device.ip}</span>
           <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-400 font-mono">{device.mac}</span>
           <span className={`px-2 py-1 rounded-full border ${online ? 'border-green-500/30 text-green-300 bg-green-950/20' : 'border-gray-700 text-gray-400 bg-gray-900/40'}`}>
-            {online ? 'Online' : 'Offline'}
+            {online ? 'Online' : 'Offline'} {/* Display online/offline status */}
           </span>
           <span className="px-2 py-1 rounded-full border border-blue-500/20 text-blue-300 bg-blue-950/20">
             {getDisplayName(device)}
           </span>
         </div>
-      </motion.div>
+      </div>
 
       <div className={`grid grid-cols-2 gap-2 text-xs ${compact ? 'mb-2 mt-3' : 'mb-3 mt-0'}`}>
         <div className="bg-gray-900/35 border border-gray-700 rounded-lg p-2">
@@ -212,81 +215,68 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
         )}
       </div>
 
-      {!compact && (
-        <div className="mb-3 bg-gray-900/35 border border-gray-700 rounded-lg p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
-            <div>
-              <div className="text-xs text-gray-300 font-medium">Segment assignment</div>
-              <div className="text-[11px] text-gray-500">Quick assign, auto-assign, or clear</div>
+      {!collapsed && !compact && (
+        <div className="mb-3">
+          <button type="button" onClick={() => setOpenDetails((s) => !s)} className="w-full flex items-center justify-between px-4 py-2 rounded-lg bg-gray-900/30 border border-gray-800/60 text-sm">
+            <div className="text-left">
+              <div className="text-xs text-gray-300 font-medium">Details</div>
+              <div className="text-[11px] text-gray-500">Toggle segment, limits and recent traffic</div>
             </div>
-            <button
-              type="button"
-              onClick={() => handleSetSegment(autoAssignSegment)}
-              disabled={savingSegment}
-              className="px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[11px] text-blue-200 hover:border-blue-400/60 hover:bg-blue-500/15 disabled:opacity-50"
-            >
-              Auto-assign {autoAssignSegment}
-            </button>
-          </div>
-          <div className="mb-2">
-            <div className="text-[11px] text-gray-500 mb-2">Suggested for {category}</div>
-            <div className="flex flex-wrap gap-2">
-              {suggestedSegments.map((segment) => (
-                <button
-                  key={`suggested-${segment}`}
-                  type="button"
-                  onClick={() => handleSetSegment(segment)}
-                  disabled={savingSegment}
-                  className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-200 hover:border-blue-500/40 hover:text-blue-200 disabled:opacity-50"
-                >
-                  {segment}
+            <div className="text-gray-300">
+              {openDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
+          </button>
+
+          {openDetails && (
+            <div className="mt-3 bg-gray-900/35 border border-gray-700 rounded-lg p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+                <div>
+                  <div className="text-xs text-gray-300 font-medium">Segment assignment</div>
+                  <div className="text-[11px] text-gray-500">Quick assign, auto-assign, or clear</div>
+                </div>
+                <button type="button" onClick={() => handleSetSegment(autoAssignSegment)} disabled={savingSegment} className="px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[11px] text-blue-200 hover:border-blue-400/60 hover:bg-blue-500/15 disabled:opacity-50">
+                  Auto-assign {autoAssignSegment}
                 </button>
-              ))}
+              </div>
+
+              <div className="mb-2">
+                <div className="text-[11px] text-gray-500 mb-2">Suggested for {category}</div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedSegments.map((segment) => (
+                    <button key={`suggested-${segment}`} type="button" onClick={() => handleSetSegment(segment)} disabled={savingSegment} className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-200 hover:border-blue-500/40 hover:text-blue-200 disabled:opacity-50">
+                      {segment}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-2">
+                {presetSegments.map((segment) => (
+                  <button key={segment} type="button" onClick={() => handleSetSegment(segment)} disabled={savingSegment} className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-200 hover:border-blue-500/40 hover:text-blue-200 disabled:opacity-50">
+                    {segment}
+                  </button>
+                ))}
+                <button type="button" onClick={() => handleSetSegment('unassigned')} disabled={savingSegment} className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-400 hover:border-gray-500 hover:text-gray-200 disabled:opacity-50">
+                  clear
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="text" value={segmentInput} onChange={(e) => setSegmentInput(e.target.value)} placeholder="custom segment" className="w-full px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm" />
+                <button type="button" onClick={() => handleSetSegment()} disabled={savingSegment || !online} className="btn btn-primary text-sm inline-flex items-center gap-1" title={!online ? 'Device offline — connect hotspot to change segment' : undefined}>
+                  {savingSegment ? 'Saving' : 'Set'}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {presetSegments.map((segment) => (
-              <button
-                key={segment}
-                type="button"
-                onClick={() => handleSetSegment(segment)}
-                disabled={savingSegment}
-                className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-200 hover:border-blue-500/40 hover:text-blue-200 disabled:opacity-50"
-              >
-                {segment}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => handleSetSegment('unassigned')}
-              disabled={savingSegment}
-              className="px-2 py-1 rounded-full border border-gray-700 bg-gray-950/50 text-[11px] text-gray-400 hover:border-gray-500 hover:text-gray-200 disabled:opacity-50"
-            >
-              clear
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={segmentInput}
-              onChange={(e) => setSegmentInput(e.target.value)}
-              placeholder="custom segment"
-              className="w-full px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => handleSetSegment()}
-              disabled={savingSegment}
-              className="btn btn-primary text-sm inline-flex items-center gap-1"
-            >
-              {savingSegment ? 'Saving' : 'Set'}
-            </button>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Traffic Chart */}
-      {!compact && <TrafficChart device={device} />}
+      {/* Traffic Chart (lazy-loaded) */}
+      {!compact && !collapsed && online && (
+        <Suspense fallback={<div className="mt-4 h-24 rounded-lg bg-gray-900/30 border border-dashed border-gray-700 flex items-center justify-center text-xs text-gray-500">Loading chart...</div>}>
+          <TrafficChart device={device} />
+        </Suspense>
+      )}
 
       {!compact ? (
         <div className="mt-3 bg-gray-900/35 border border-gray-700 rounded-lg p-3">
@@ -309,12 +299,25 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             />
             <button
               onClick={handleSetLimit}
-              disabled={savingLimit}
+              disabled={savingLimit || !online}
               className="btn btn-primary text-sm inline-flex items-center gap-1"
+              title={!online ? 'Device offline — connect hotspot to change limit' : undefined}
             >
               <Save size={14} />
               {savingLimit ? 'Saving' : 'Set'}
             </button>
+          </div>
+          <div className="mt-2">
+            <label className="text-[11px] text-gray-400 mb-1 block">Adjust limit</label>
+            <input
+              type="range"
+              min="1"
+              max="5000"
+              value={Number(limitInput || 100)}
+              onChange={(e) => setLimitInput(String(e.target.value))}
+              aria-label={`Set limit for ${displayName}`}
+              className="w-full h-2 bg-gray-800 rounded-lg accent-accent-blue"
+            />
           </div>
           <div className="mt-3">
             <div className="flex justify-between text-[11px] text-gray-400 mb-1">
@@ -334,6 +337,8 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           <button
             onClick={handleVerify}
             className="flex-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2"
+            disabled={!online}
+            title={!online ? 'Device offline — connect hotspot to verify' : undefined}
           >
             <CheckCircle size={14} />
             {isBlocked ? 'Release' : 'Allow'}
@@ -341,6 +346,8 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           <button
             onClick={handleBlock}
             className="flex-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2"
+            disabled={!online}
+            title={!online ? 'Device offline — connect hotspot to block' : undefined}
           >
             <ShieldAlert size={14} />
             Block
@@ -349,32 +356,23 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
       )}
 
       {!compact && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          className="flex gap-2 mt-4"
-        >
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+        <div className="flex gap-2 mt-4">
+          <button
             onClick={handleVerify}
             className="flex-1 btn btn-success text-sm font-medium flex items-center justify-center gap-2"
           >
             <CheckCircle size={16} />
             {isBlocked ? 'Release' : 'Verify'}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+          </button>
+          <button
             onClick={handleBlock}
             className="flex-1 btn btn-ghost text-sm font-medium flex items-center justify-center gap-2"
           >
             <ShieldAlert size={16} />
             Block
-          </motion.button>
-        </motion.div>
+          </button>
+        </div>
       )}
-    </motion.div>
+    </div>
   );
 }

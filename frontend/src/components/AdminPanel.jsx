@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, Key, Shield, AlertCircle, CheckCircle, Lock } from 'lucide-react';
 
-export default function AdminPanel() {
+export default function AdminPanel({ hotspotActive = true }) {
   const [provOpen, setProvOpen] = useState(false);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [provLoading, setProvLoading] = useState(false);
@@ -11,11 +11,47 @@ export default function AdminPanel() {
   const [applyDns, setApplyDns] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
   const [tokenStatus, setTokenStatus] = useState('not-set');
+  const [segmentsInfo, setSegmentsInfo] = useState(null);
+  const [applyingSegments, setApplyingSegments] = useState(false);
+  const [selectedSegments, setSelectedSegments] = useState(new Set());
+  const [policiesText, setPoliciesText] = useState('');
+  const [savingPolicies, setSavingPolicies] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('PROVISION_TOKEN');
     setTokenStatus(saved ? 'set' : 'not-set');
+    // fetch segments info
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:8000/segments');
+        const json = await res.json();
+        setSegmentsInfo(json);
+        // also fetch policies source
+        try {
+          const p = await fetch('http://localhost:8000/policies');
+          const pj = await p.json();
+          setPoliciesText(JSON.stringify(pj.policies || pj || {}, null, 2));
+        } catch (e) {}
+        // fetch dry-run status
+        try {
+          const dr = await fetch('http://localhost:8000/enforcer/dryrun');
+          const dj = await dr.json();
+          setDryRun(Boolean(dj.dry_run));
+        } catch (e) {}
+        } catch (e) {
+        // ignore
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    if (segmentsInfo && segmentsInfo.policies && segmentsInfo.policies.segments) {
+      const names = (segmentsInfo.policies.segments || []).map((s) => s.name).filter(Boolean);
+      setSelectedSegments(new Set(names));
+    }
+  }, [segmentsInfo]);
 
   const handleProvisioning = async () => {
     if (!applyVlan && !applyDns) return;
@@ -25,7 +61,7 @@ export default function AdminPanel() {
       const token = localStorage.getItem('PROVISION_TOKEN') || '';
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const body = { apply_vlan: applyVlan, apply_dns: applyDns };
+      const body = { apply_vlan: applyVlan, apply_dns: applyDns, segments: Array.from(selectedSegments || []) };
       const res = await fetch('http://localhost:8000/provision', {
         method: 'POST',
         headers,
@@ -86,10 +122,165 @@ export default function AdminPanel() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Segments Card */}
+        <motion.div
+          whileHover={{ y: -2 }}
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
+        >
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-100 flex items-center gap-2">
+                <Shield size={24} className="text-accent-blue" />
+                Segmentation
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">View and apply network segment policies</p>
+            </div>
+            <span className="px-3 py-1 rounded-full text-[11px] border border-blue-500/20 text-blue-300 bg-blue-950/20">Network</span>
+          </div>
+
+          <div className="bg-gray-800/40 border border-gray-700/40 rounded-lg p-4 mb-4">
+            <p className="text-sm text-gray-300 leading-relaxed">
+              Segments are defined in <code className="text-accent-blue text-xs">backend/policies.json</code>. You can view assigned segments and force re-apply iptables rules.
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-xs text-gray-400 mb-2">Assigned segments</div>
+            <div className="flex flex-wrap gap-2">
+              {(segmentsInfo && segmentsInfo.policies && segmentsInfo.policies.segments && segmentsInfo.policies.segments.length) ? (
+                segmentsInfo.policies.segments.map((seg) => (
+                  <label key={seg.name} className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-700 bg-gray-900/30 text-xs text-gray-200 cursor-pointer">
+                    <input type="checkbox" checked={selectedSegments.has(seg.name)} onChange={(e) => {
+                      const next = new Set(selectedSegments);
+                      if (e.target.checked) next.add(seg.name); else next.delete(seg.name);
+                      setSelectedSegments(next);
+                    }} className="w-4 h-4" />
+                    <span className="font-medium">{seg.name}</span>
+                    <span className="text-xs text-gray-400 ml-2">{seg.cidr || ''}</span>
+                  </label>
+                ))
+              ) : (
+                <span className="text-xs text-gray-500">No segments defined in policies.json</span>
+              )}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-xs text-gray-400 mb-2">Policies (preview)</div>
+            <div className="mb-2">
+              <textarea value={policiesText} onChange={(e) => setPoliciesText(e.target.value)} className="w-full h-40 text-xs p-2 font-mono bg-gray-800 border border-gray-700 rounded text-gray-200" />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              onClick={async () => {
+                setApplyingSegments(true);
+                try {
+                  // call apply segments endpoint which rebuilds iptables from DB
+                  await fetch('http://localhost:8000/segments/apply', { method: 'POST' });
+                } catch (e) {}
+                setApplyingSegments(false);
+              }}
+              disabled={!hotspotActive}
+              className="btn btn-primary disabled:opacity-50"
+              title={!hotspotActive ? 'Connect hotspot to apply segment policies' : undefined}
+            >
+              {applyingSegments ? 'Applying...' : 'Apply Segment Policies'}
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('http://localhost:8000/segments');
+                  const json = await res.json();
+                  setSegmentsInfo(json);
+                  try {
+                    const p = await fetch('http://localhost:8000/policies');
+                    const pj = await p.json();
+                    setPoliciesText(JSON.stringify(pj.policies || pj || {}, null, 2));
+                  } catch (e) {}
+                } catch (e) {}
+              }}
+              className="btn btn-ghost"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="mt-3 text-xs text-gray-400">Selected segments will be used for provisioning when you click <strong>Start Provisioning</strong>.</div>
+          <div className="mt-3 flex items-center gap-2 justify-end">
+            <button
+              onClick={async () => {
+                // Save policies
+                let payload = {};
+                try {
+                  payload = JSON.parse(policiesText || '{}');
+                } catch (e) {
+                  alert('Invalid JSON');
+                  return;
+                }
+                setSavingPolicies(true);
+                try {
+                  const token = localStorage.getItem('PROVISION_TOKEN') || '';
+                  const headers = { 'Content-Type': 'application/json' };
+                  if (token) headers['Authorization'] = `Bearer ${token}`;
+                  const res = await fetch('http://localhost:8000/policies', { method: 'POST', headers, body: JSON.stringify(payload) });
+                  const j = await res.json();
+                  if (j.status === 'ok') {
+                    alert('Policies saved');
+                  } else {
+                    alert('Save failed: ' + (j.error || JSON.stringify(j)));
+                  }
+                } catch (e) {
+                  alert('Save error: ' + e);
+                } finally {
+                  setSavingPolicies(false);
+                }
+              }}
+              disabled={!hotspotActive}
+              className="btn btn-success disabled:opacity-50"
+              title={!hotspotActive ? 'Connect hotspot to save policies' : undefined}
+            >
+              {savingPolicies ? 'Saving...' : 'Save Policies'}
+            </button>
+          </div>
+          <div className="mt-3">
+            <label className={`flex items-center gap-3 ${!hotspotActive ? 'opacity-60' : 'cursor-pointer'} group`}>
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={async (e) => {
+                  const desired = e.target.checked;
+                  setDryRunLoading(true);
+                  try {
+                    const token = localStorage.getItem('PROVISION_TOKEN') || '';
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                    const res = await fetch('http://localhost:8000/enforcer/dryrun', { method: 'POST', headers, body: JSON.stringify({ dry_run: desired }) });
+                    const j = await res.json();
+                    if (j.status === 'ok') setDryRun(Boolean(j.dry_run));
+                    else alert('Failed to set dry-run: ' + (j.error || JSON.stringify(j)));
+                  } catch (err) {
+                    alert('Error setting dry-run: ' + err);
+                  } finally {
+                    setDryRunLoading(false);
+                  }
+                }}
+                className="w-5 h-5 cursor-pointer accent-accent-blue rounded"
+                disabled={tokenStatus !== 'set'}
+              />
+              <span className="text-sm text-gray-200 group-hover:text-white transition">
+                <strong>Enforcement dry-run</strong>
+                <p className="text-xs text-gray-400">When enabled, enforcement actions are simulated and no iptables changes are applied.</p>
+              </span>
+              <div className="ml-auto text-xs text-gray-400">{dryRunLoading ? 'Updating...' : (dryRun ? 'DRY' : 'LIVE')}</div>
+            </label>
+          </div>
+        </motion.div>
+
         {/* Provisioning Card */}
         <motion.div
-          whileHover={{ y: -4 }}
-          className="rounded-2xl border border-gray-800/60 bg-gradient-to-br from-gray-900/50 to-gray-950/50 p-6 shadow-lg hover:shadow-xl transition"
+          whileHover={{ y: -2 }}
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -109,24 +300,26 @@ export default function AdminPanel() {
           </div>
 
           <div className="space-y-3 mb-4">
-            <label className="flex items-center gap-3 cursor-pointer group">
+            <label className={`flex items-center gap-3 ${!hotspotActive ? 'opacity-60' : 'cursor-pointer'} group`}>
               <input
                 type="checkbox"
                 checked={applyVlan}
                 onChange={(e) => setApplyVlan(e.target.checked)}
                 className="w-5 h-5 cursor-pointer accent-accent-blue rounded"
+                disabled={!hotspotActive}
               />
               <span className="text-sm text-gray-200 group-hover:text-white transition">
                 <strong>Create VLAN interfaces</strong>
                 <p className="text-xs text-gray-400">eth0.100, eth0.200, bridges, etc.</p>
               </span>
             </label>
-            <label className="flex items-center gap-3 cursor-pointer group">
+            <label className={`flex items-center gap-3 ${!hotspotActive ? 'opacity-60' : 'cursor-pointer'} group`}>
               <input
                 type="checkbox"
                 checked={applyDns}
                 onChange={(e) => setApplyDns(e.target.checked)}
                 className="w-5 h-5 cursor-pointer accent-accent-green rounded"
+                disabled={!hotspotActive}
               />
               <span className="text-sm text-gray-200 group-hover:text-white transition">
                 <strong>Configure dnsmasq DHCP</strong>
@@ -142,11 +335,12 @@ export default function AdminPanel() {
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-gray-500">A confirmation dialog will appear before any system changes.</p>
             <button
               onClick={() => setProvOpen(true)}
-              disabled={!applyVlan && !applyDns}
+              disabled={!hotspotActive || (!applyVlan && !applyDns)}
+              title={!hotspotActive ? 'Connect hotspot to enable provisioning' : undefined}
               className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
             >
               {provLoading ? (
@@ -182,8 +376,8 @@ export default function AdminPanel() {
 
         {/* Security Token Card */}
         <motion.div
-          whileHover={{ y: -4 }}
-          className="rounded-2xl border border-gray-800/60 bg-gradient-to-br from-gray-900/50 to-gray-950/50 p-6 shadow-lg hover:shadow-xl transition"
+          whileHover={{ y: -2 }}
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -208,7 +402,7 @@ export default function AdminPanel() {
             </p>
           </div>
 
-          <div className="space-y-3 mb-4">
+            <div className="space-y-3 mb-4">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-2">Current Status</label>
               <div className="flex items-center gap-2">
@@ -234,7 +428,7 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-gray-500">Keep this token in sync with the backend environment variable.</p>
             <button
               onClick={() => {
@@ -242,6 +436,8 @@ export default function AdminPanel() {
                 setTokenOpen(true);
               }}
               className="btn btn-success"
+              disabled={!hotspotActive}
+              title={!hotspotActive ? 'Connect hotspot to manage token' : undefined}
             >
               🔐 Manage Token
             </button>
@@ -253,7 +449,7 @@ export default function AdminPanel() {
       {tokenOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setTokenOpen(false)} />
-          <div className="bg-gradient-to-br from-gray-900 to-gray-950 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-2xl">
+          <div className="bg-gray-900 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
             <h3 className="text-xl font-bold text-gray-100 mb-1">Security Token Settings</h3>
             <p className="text-xs text-gray-500 mb-4">Configure authentication token for provisioning</p>
 
@@ -281,6 +477,8 @@ export default function AdminPanel() {
               <button
                 onClick={handleTokenSave}
                 className="btn btn-success"
+                disabled={!hotspotActive}
+                title={!hotspotActive ? 'Connect hotspot to save token' : undefined}
               >
                 ✓ Save Token
               </button>
@@ -293,7 +491,7 @@ export default function AdminPanel() {
       {provOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => (provLoading ? null : setProvOpen(false))} />
-          <div className="bg-gradient-to-br from-gray-900 to-gray-950 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-2xl">
+          <div className="bg-gray-900 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
             <h3 className="text-lg font-bold text-gray-100 mb-2">Confirm Provisioning</h3>
             <p className="text-sm text-gray-400 mb-4">Review your settings before starting provisioning</p>
 
@@ -325,7 +523,8 @@ export default function AdminPanel() {
                   handleProvisioning();
                   setProvOpen(false);
                 }}
-                disabled={provLoading}
+                disabled={provLoading || !hotspotActive}
+                title={!hotspotActive ? 'Connect hotspot to start provisioning' : undefined}
                 className="btn btn-primary disabled:opacity-50 flex items-center gap-2"
               >
                 {provLoading ? (

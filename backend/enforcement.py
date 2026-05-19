@@ -7,7 +7,7 @@ import database
 
 
 class EnforcementEngine:
-    def __init__(self, wan_iface: str = "eth0", lan_iface: str = "wlp2s0", segments: Optional[Dict[str, str]] = None):
+    def __init__(self, wan_iface: str = "eth0", lan_iface: str = "wlp2s0", segments: Optional[Dict[str, str]] = None, dry_run: bool = False):
         """
         wan_iface: Internet input interface (e.g., Ethernet)
         lan_iface: Default LAN / hotspot output interface (e.g., Wi-Fi)
@@ -16,6 +16,7 @@ class EnforcementEngine:
         self.wan = wan_iface
         self.lan = lan_iface
         self.segments = segments or {}
+        self.dry_run = bool(dry_run)
         # policy_defs holds the raw policy objects from policies.json
         self.policy_defs: Dict[str, dict] = {}
         # Attempt to load policies.json from the backend directory
@@ -27,6 +28,9 @@ class EnforcementEngine:
 
     def _run_cmd(self, command: str) -> bool:
         """Safely executes a shell command using shlex for input sanitization."""
+        if self.dry_run:
+            print(f"[DRY_RUN] would run: {command}")
+            return True
         try:
             result = subprocess.run(shlex.split(command), check=True, capture_output=True)
             return True
@@ -37,11 +41,28 @@ class EnforcementEngine:
 
     def _check_cmd(self, command: str) -> bool:
         """Run a command and return True if it exits 0, False otherwise (no noisy output)."""
+        if self.dry_run:
+            print(f"[DRY_RUN] check: {command} -> pretending OK")
+            return True
         try:
             subprocess.run(shlex.split(command), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
         except Exception:
             return False
+
+    def set_dry_run(self, value: bool):
+        self.dry_run = bool(value)
+
+    def _exec_list(self, args, check=False, capture_output=True, text=False):
+        """Execute a subprocess.run style list command, or print when in dry-run mode."""
+        if self.dry_run:
+            try:
+                printable = ' '.join(args)
+            except Exception:
+                printable = str(args)
+            print(f"[DRY_RUN] would run: {printable}")
+            return subprocess.CompletedProcess(args, 0, stdout=("" if text else b""), stderr=("" if text else b""))
+        return subprocess.run(args, check=check, capture_output=capture_output, text=text)
 
     def setup_gateway(self) -> bool:
         """Initializes the Zero-Trust environment with a default deny policy and NAT."""
@@ -101,10 +122,51 @@ class EnforcementEngine:
         # Ensure segment chain exists and is attached
         try:
             # create custom chain if missing
-            subprocess.run(["sudo", "iptables", "-N", "ZT_SEGMENTS"], check=False, capture_output=True)
+            self._exec_list(["sudo", "iptables", "-N", "ZT_SEGMENTS"], check=False, capture_output=True)
             # ensure FORWARD jumps to ZT_SEGMENTS early
             if not self._check_cmd("sudo iptables -C FORWARD -j ZT_SEGMENTS"):
-                subprocess.run(["sudo", "iptables", "-I", "FORWARD", "-j", "ZT_SEGMENTS"], check=False, capture_output=True)
+                self._exec_list(["sudo", "iptables", "-I", "FORWARD", "-j", "ZT_SEGMENTS"], check=False, capture_output=True)
+            # create quarantine chain and populate with conservative drop rules
+            self._exec_list(["sudo", "iptables", "-N", "ZT_QUARANTINE"], check=False, capture_output=True)
+            # flush and seed quarantine chain
+            self._exec_list(["sudo", "iptables", "-F", "ZT_QUARANTINE"], check=False, capture_output=True)
+            # allow established/related to avoid breaking existing connections
+            self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"], check=False, capture_output=True)
+            # allow DHCP traffic (clients need to obtain IP)
+            self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"], check=False, capture_output=True)
+            # actively reject DNS to prevent name resolution
+            self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", "53", "-j", "REJECT", "--reject-with", "icmp-port-unreachable"], check=False, capture_output=True)
+            self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+            # proactively block traffic headed to common public DNS resolvers (prevents device from bypassing local DNS)
+            public_resolvers = ["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "149.112.112.112"]
+            for r in public_resolvers:
+                self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-d", r, "-p", "udp", "--dport", "53", "-j", "REJECT", "--reject-with", "icmp-port-unreachable"], check=False, capture_output=True)
+                self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-d", r, "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+
+            # block common proxy and tunneling ports to reduce bypass attempts
+            for p in ["3128", "8080", "8888", "8000", "1080"]:
+                self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", p, "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+                self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", p, "-j", "REJECT", "--reject-with", "icmp-port-unreachable"], check=False, capture_output=True)
+            # final drop: anything not explicitly allowed is dropped
+            self._exec_list(["sudo", "iptables", "-A", "ZT_QUARANTINE", "-j", "DROP"], check=False, capture_output=True)
+            # --- IPv6 equivalent chains ---
+            try:
+                self._exec_list(["sudo", "ip6tables", "-N", "ZT_QUARANTINE"], check=False, capture_output=True)
+                self._exec_list(["sudo", "ip6tables", "-F", "ZT_QUARANTINE"], check=False, capture_output=True)
+                self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"], check=False, capture_output=True)
+                # block IPv6 DNS (port 53) and common proxy ports
+                self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", "53", "-j", "DROP"], check=False, capture_output=True)
+                self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", "53", "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+                for p in ["3128", "8080", "8888", "8000", "1080"]:
+                    self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "tcp", "--dport", p, "-j", "REJECT", "--reject-with", "tcp-reset"], check=False, capture_output=True)
+                    self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-p", "udp", "--dport", p, "-j", "DROP"], check=False, capture_output=True)
+                self._exec_list(["sudo", "ip6tables", "-A", "ZT_QUARANTINE", "-j", "DROP"], check=False, capture_output=True)
+                # ensure ip6tables FORWARD jumps to ZT_SEGMENTS equivalent
+                self._exec_list(["sudo", "ip6tables", "-N", "ZT_SEGMENTS"], check=False, capture_output=True)
+                if not self._check_cmd("sudo ip6tables -C FORWARD -j ZT_SEGMENTS"):
+                    self._exec_list(["sudo", "ip6tables", "-I", "FORWARD", "-j", "ZT_SEGMENTS"], check=False, capture_output=True)
+            except Exception:
+                pass
         except Exception:
             pass
         return True
@@ -117,7 +179,7 @@ class EnforcementEngine:
         """
         try:
             # Flush chain
-            subprocess.run(["sudo", "iptables", "-F", "ZT_SEGMENTS"], check=False, capture_output=True)
+            self._exec_list(["sudo", "iptables", "-F", "ZT_SEGMENTS"], check=False, capture_output=True)
             devices = database.list_devices()
             # group by segment
             seg_map = {}
@@ -137,7 +199,7 @@ class EnforcementEngine:
                 if iface:
                     # Allow all forwarding where both ingress and egress are the segment iface
                     try:
-                        subprocess.run(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-i", iface, "-o", iface, "-j", "ACCEPT"], check=False, capture_output=True)
+                        self._exec_list(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-i", iface, "-o", iface, "-j", "ACCEPT"], check=False, capture_output=True)
                     except Exception:
                         pass
                     # also permit intra-segment host pairs as a fallback
@@ -146,7 +208,7 @@ class EnforcementEngine:
                             if src == dst:
                                 continue
                             try:
-                                subprocess.run(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-s", src, "-d", dst, "-j", "ACCEPT"], check=False, capture_output=True)
+                                self._exec_list(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-s", src, "-d", dst, "-j", "ACCEPT"], check=False, capture_output=True)
                             except Exception:
                                 pass
                     continue
@@ -157,7 +219,7 @@ class EnforcementEngine:
                             continue
                         # insert rule to accept forwarding between src->dst
                         try:
-                            subprocess.run(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-s", src, "-d", dst, "-j", "ACCEPT"], check=False, capture_output=True)
+                            self._exec_list(["sudo", "iptables", "-A", "ZT_SEGMENTS", "-s", src, "-d", dst, "-j", "ACCEPT"], check=False, capture_output=True)
                         except Exception:
                             pass
             return True
@@ -203,6 +265,18 @@ class EnforcementEngine:
     def allow_device(self, ip: str, segment: Optional[str] = None) -> bool:
         """Insert an ACCEPT rule for a verified IP on the appropriate segment interface."""
         iface = self._iface_for_segment(segment)
+        # remove any quarantine jump for this IP first (both IPv4 and IPv6)
+        try:
+            self._exec_list(["sudo", "iptables", "-D", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=True, capture_output=True)
+        except Exception:
+            pass
+        # IPv6 cleanup
+        if ':' in ip:
+            try:
+                self._exec_list(["sudo", "ip6tables", "-D", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=True, capture_output=True)
+            except Exception:
+                pass
+
         check_cmd = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(iface)} -j ACCEPT"
         # If rule already exists, nothing to do
         if self._check_cmd(check_cmd):
@@ -220,19 +294,34 @@ class EnforcementEngine:
         iface = self._iface_for_segment(segment)
         del_cmd = f"sudo iptables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(iface)} -j ACCEPT"
         removed_any = False
-        # Attempt to delete matching rules repeatedly until none remain
+        # Attempt to delete matching rules repeatedly until none remain.
+        # Use _run_cmd which respects dry-run. In dry-run we avoid infinite loops by breaking after one attempt.
         while True:
-            try:
-                subprocess.run(shlex.split(del_cmd), check=True, capture_output=True)
+            ok = self._run_cmd(del_cmd)
+            if ok:
                 removed_any = True
-            except subprocess.CalledProcessError:
-                break
+                if self.dry_run:
+                    break
+                # continue trying to remove duplicates
+                continue
+            break
 
         if removed_any:
             print(f"[QUARANTINE] Access revoked for {ip} on {iface}")
+            # ensure a quarantine rule exists so the IP is actively dropped
+            try:
+                # insert at top of ZT_SEGMENTS so quarantine is evaluated early
+                self._exec_list(["sudo", "iptables", "-I", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=False, capture_output=True)
+            except Exception:
+                pass
             return True
 
         # No rule found — already blocked by policy
+        try:
+            # ensure quarantine rule present even if no accept rule existed
+            self._exec_list(["sudo", "iptables", "-I", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=False, capture_output=True)
+        except Exception:
+            pass
         print(f"[QUARANTINE] {ip} already blocked on {iface}")
         return True
 

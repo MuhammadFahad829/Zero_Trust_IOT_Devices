@@ -351,7 +351,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
         const d = hovered.device;
         return (
           <div style={{ left, top }} className="absolute z-50 pointer-events-auto">
-            <div className="w-56 card-soft p-3 text-xs shadow-lg">
+            <div className="w-56 card-soft p-3 text-xs shadow">
               <div className="flex items-start gap-3">
                 <div className="pt-1">{getDeviceIcon(d.vendor)}</div>
                 <div className="flex-1">

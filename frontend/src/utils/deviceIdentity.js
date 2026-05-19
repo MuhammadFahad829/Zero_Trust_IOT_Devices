@@ -1,7 +1,9 @@
 const VENDOR_RULES = [
   { match: /huawei/i, name: 'Huawei', token: 'HW', color: '#b91c1c' },
+  { match: /honor/i, name: 'Honor', token: 'HN', color: '#ef4444' },
   { match: /apple/i, name: 'Apple', token: 'AP', color: '#334155' },
   { match: /samsung/i, name: 'Samsung', token: 'SG', color: '#1d4ed8' },
+  { match: /xiaomi/i, name: 'Xiaomi', token: 'XM', color: '#ea580c' },
   { match: /xiaomi|redmi|mi /i, name: 'Xiaomi', token: 'XM', color: '#ea580c' },
   { match: /oppo/i, name: 'OPPO', token: 'OP', color: '#15803d' },
   { match: /vivo/i, name: 'vivo', token: 'VV', color: '#0f766e' },
@@ -19,6 +21,9 @@ const VENDOR_RULES = [
   { match: /cisco/i, name: 'Cisco', token: 'CS', color: '#0891b2' },
   { match: /raspberry|raspberry pi/i, name: 'RaspberryPi', token: 'RP', color: '#d946ef' },
   { match: /private|randomized|unknown/i, name: 'Private Device', token: 'PR', color: '#374151' },
+  { match: /zte/i, name: 'ZTE', token: 'ZT', color: '#7b2cbf' },
+  { match: /motorola/i, name: 'Motorola', token: 'MO', color: '#0ea5a4' },
+  { match: /lg/i, name: 'LG', token: 'LG', color: '#fb7185' },
 ];
 
 function fallbackToken(value) {
@@ -96,11 +101,13 @@ export function getDisplayName(device) {
   const vendor = getVendorMeta(device.vendor);
   const category = inferCategory(device.device_type, device.vendor);
   const ipTail = String(device.ip || '').split('.').pop() || '';
+  const macTail = String(device.mac || '').split(':').pop() || '';
 
   if (device.vendor && !/private\/randomized mac/i.test(device.vendor)) {
     if (category === 'Other') return vendor.name;
     return `${vendor.name} ${category}`;
   }
-  if (category === 'Other') return ipTail ? `Unknown Device ${ipTail}` : 'Unknown Device';
-  return ipTail ? `${category} Device ${ipTail}` : `${category} Device`;
+  // Provide better fallback names using MAC tail when available.
+  if (category === 'Other') return macTail ? `Unknown Device ${macTail}` : ipTail ? `Unknown Device ${ipTail}` : 'Unknown Device';
+  return macTail ? `${category} ${macTail}` : ipTail ? `${category} Device ${ipTail}` : `${category} Device`;
 }

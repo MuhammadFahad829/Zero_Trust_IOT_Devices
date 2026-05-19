@@ -12,14 +12,18 @@ fi
 
 echo "Using policies: $POLICIES"
 
-python3 - <<PY
+python3 - "$POLICIES" <<'PY'
 import json,sys
 from pathlib import Path
 p=Path(sys.argv[1])
 if not p.exists():
     print('# policies file not found:', p)
     sys.exit(1)
-data=json.load(p.open())
+try:
+    data=json.load(p.open())
+except Exception as e:
+    print('# failed to parse policies JSON:', e)
+    sys.exit(1)
 segs=data.get('segments', [])
 for s in segs:
     name=s.get('name')
@@ -44,16 +48,20 @@ for s in segs:
     else:
         print(f"# SEGMENT {name} has no iface/vlan configured; skipping L2 provisioning")
 
-PY "$POLICIES"
+PY
 
 if [ "$APPLY" = true ]; then
   echo "Applying changes... (already printed commands above)"
   # Re-run python to execute commands directly
-  python3 - <<PY
+    python3 - "$POLICIES" <<'PY'
 import json,sys,subprocess
 from pathlib import Path
 p=Path(sys.argv[1])
-data=json.load(p.open())
+try:
+        data=json.load(p.open())
+except Exception as e:
+        print('# failed to parse policies JSON during apply:', e)
+        sys.exit(1)
 segs=data.get('segments', [])
 for s in segs:
     name=s.get('name')
@@ -70,7 +78,7 @@ for s in segs:
     elif iface:
         subprocess.run(["sudo","ip","link","set","dev",iface,"up"], check=False)
 
-PY "$POLICIES"
+PY
 fi
 
 echo "Done. If you used --apply, VLAN interfaces/bridges were created."
