@@ -3,8 +3,20 @@ import time
 from collections import deque
 from typing import Optional, Callable
 
-from scapy.all import sniff, IP
+try:
+    from scapy.all import sniff, IP
+except Exception:
+    # Allow running the monitor in environments without scapy (profiling, CI).
+    sniff = None
+
+    class _DummyIP:
+        pass
+
+    IP = _DummyIP
 import database
+import telemetry
+import time
+from functools import wraps
 
 
 class TrafficMonitor:
@@ -22,7 +34,9 @@ class TrafficMonitor:
         self.on_alert = on_alert
         self.total_bytes = 0
         self._window = deque()  # (timestamp, bytes)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        # throttle per-device sample appends to reduce CPU on high packet rates
+        self._last_sample_time = {}
 
     def _trim_device_window(self, ip_src: str, now: float):
         window = self.device_windows.setdefault(ip_src, deque())
@@ -40,6 +54,11 @@ class TrafficMonitor:
         return (total / span) / (1024 * 1024)
 
     def _append_device_sample(self, ip_src: str, now: float):
+        # throttle history sampling to at most once per second per device
+        last = self._last_sample_time.get(ip_src, 0)
+        if now - last < 1.0:
+            return
+        self._last_sample_time[ip_src] = now
         history = self.device_history.setdefault(ip_src, deque(maxlen=60))
         history.append(
             {
@@ -50,8 +69,15 @@ class TrafficMonitor:
                 "timestamp": now,
             }
         )
+        # update prometheus per-device and total metrics
+        try:
+            telemetry.set_device_mbps(ip_src, round(self._device_mbps(ip_src), 4))
+            telemetry.set_total_mbps(round(self.get_current_mbps(), 4))
+        except Exception:
+            pass
 
     def _process_packet(self, pkt):
+        start = time.time()
         if pkt.haslayer(IP):
             ip_src = pkt[IP].src
             p_size = len(pkt)
@@ -89,6 +115,12 @@ class TrafficMonitor:
                 # Do not reset total bytes to preserve usage history, only throttle repeated alerts
                 with self._lock:
                     self.device_total_bytes[ip_src] = current_total
+        # instrumentation
+        try:
+            telemetry.inc_packet_processed()
+        except Exception:
+            pass
+        telemetry.observe_packet_latency(time.time() - start)
 
     def _trim_window(self, now: float):
         while self._window and (now - self._window[0][0]) > 3.0:
@@ -137,6 +169,10 @@ class TrafficMonitor:
 
             self.device_total_bytes[ip_src] = self.device_total_bytes.get(ip_src, 0) + bytes_count
             self._append_device_sample(ip_src, timestamp)
+        try:
+            telemetry.inc_packet_processed()
+        except Exception:
+            pass
 
     def get_device_history(self, ip_src: str) -> list:
         with self._lock:

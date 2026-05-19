@@ -22,7 +22,7 @@ def suggest_segment_for_device(device_type: str = None, vendor: str = None) -> s
         return "private"
     if any(token in text for token in ("camera", "ipcamera", "security cam", "cctv")):
         return "camera"
-    if any(token in text for token in ("router", "gateway", "switch", "ap", "access point")):
+    if any(token in text for token in ("network", "router", "gateway", "switch", "ap", "access point")):
         return "network"
     if any(token in text for token in ("desktop", "laptop", "pc", "computer", "workstation")):
         return "work"

@@ -3,27 +3,30 @@ const VENDOR_RULES = [
   { match: /honor/i, name: 'Honor', token: 'HN', color: '#ef4444' },
   { match: /apple/i, name: 'Apple', token: 'AP', color: '#334155' },
   { match: /samsung/i, name: 'Samsung', token: 'SG', color: '#1d4ed8' },
-  { match: /xiaomi/i, name: 'Xiaomi', token: 'XM', color: '#ea580c' },
-  { match: /xiaomi|redmi|mi /i, name: 'Xiaomi', token: 'XM', color: '#ea580c' },
+  { match: /xiaomi|redmi|mi\b/i, name: 'Xiaomi', token: 'XM', color: '#ea580c' },
   { match: /oppo/i, name: 'OPPO', token: 'OP', color: '#15803d' },
   { match: /vivo/i, name: 'vivo', token: 'VV', color: '#0f766e' },
   { match: /realme/i, name: 'realme', token: 'RM', color: '#ca8a04' },
-  { match: /intel/i, name: 'Intel', token: 'IN', color: '#075985' },
+  { match: /intel|mediatek|qualcomm/i, name: 'Chipset', token: 'CS', color: '#075985' },
   { match: /lenovo/i, name: 'Lenovo', token: 'LV', color: '#6d28d9' },
   { match: /dell/i, name: 'Dell', token: 'DL', color: '#2563eb' },
-  { match: /hp/i, name: 'HP', token: 'HP', color: '#0369a1' },
+  { match: /hp\b|hewlett-packard/i, name: 'HP', token: 'HP', color: '#0369a1' },
   { match: /chongqing fugui/i, name: 'Fugui', token: 'FG', color: '#7c3aed' },
   { match: /tp-link|tplink/i, name: 'TP-Link', token: 'TP', color: '#0ea5a4' },
   { match: /espressif|esp8266|esp32/i, name: 'Espressif', token: 'ES', color: '#ef4444' },
   { match: /broadcom/i, name: 'Broadcom', token: 'BC', color: '#0ea5a4' },
-  { match: /google/i, name: 'Google', token: 'GG', color: '#6366f1' },
-  { match: /amazon|alexa/i, name: 'Amazon', token: 'AM', color: '#f59e0b' },
-  { match: /cisco/i, name: 'Cisco', token: 'CS', color: '#0891b2' },
+  { match: /google|nest/i, name: 'Google', token: 'GG', color: '#6366f1' },
+  { match: /amazon|alexa|echo/i, name: 'Amazon', token: 'AM', color: '#f59e0b' },
+  { match: /cisco/i, name: 'Cisco', token: 'CI', color: '#0891b2' },
   { match: /raspberry|raspberry pi/i, name: 'RaspberryPi', token: 'RP', color: '#d946ef' },
+  { match: /roku|lg tv|samsung tv|hisense|panasonic/i, name: 'TV/Media', token: 'TV', color: '#f97316' },
+  { match: /roku|roku inc/i, name: 'Roku', token: 'RK', color: '#f97316' },
+  { match: /philips|hue|lifx|yeelight/i, name: 'Philips/Lights', token: 'PH', color: '#f59e0b' },
+  { match: /roku|nvidia|nintendo|sony|playstation|xbox/i, name: 'Gaming', token: 'GM', color: '#ef4444' },
   { match: /private|randomized|unknown/i, name: 'Private Device', token: 'PR', color: '#374151' },
   { match: /zte/i, name: 'ZTE', token: 'ZT', color: '#7b2cbf' },
   { match: /motorola/i, name: 'Motorola', token: 'MO', color: '#0ea5a4' },
-  { match: /lg/i, name: 'LG', token: 'LG', color: '#fb7185' },
+  { match: /lg\b/i, name: 'LG', token: 'LG', color: '#fb7185' },
 ];
 
 function fallbackToken(value) {
@@ -103,11 +106,18 @@ export function getDisplayName(device) {
   const ipTail = String(device.ip || '').split('.').pop() || '';
   const macTail = String(device.mac || '').split(':').pop() || '';
 
-  if (device.vendor && !/private\/randomized mac/i.test(device.vendor)) {
+  // Treat explicitly-private/randomized vendor strings as unknown and prefer
+  // device type or MAC tail for a clearer display name.
+  if (device.vendor && !/private|randomized|private\/randomized mac/i.test(device.vendor)) {
     if (category === 'Other') return vendor.name;
     return `${vendor.name} ${category}`;
   }
   // Provide better fallback names using MAC tail when available.
+  // If vendor is private/randomized, try to use any detected device type first
+  // then fall back to MAC/IP tail to make the device identifiable.
+  if (device.device_type && device.device_type !== 'Unknown') {
+    return macTail ? `${device.device_type} ${macTail}` : `${device.device_type}`;
+  }
   if (category === 'Other') return macTail ? `Unknown Device ${macTail}` : ipTail ? `Unknown Device ${ipTail}` : 'Unknown Device';
   return macTail ? `${category} ${macTail}` : ipTail ? `${category} Device ${ipTail}` : `${category} Device`;
 }

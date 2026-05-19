@@ -17,6 +17,7 @@ export default function AdminPanel({ hotspotActive = true }) {
   const [segmentsInfo, setSegmentsInfo] = useState(null);
   const [applyingSegments, setApplyingSegments] = useState(false);
   const [selectedSegments, setSelectedSegments] = useState(new Set());
+  const [segmentQuery, setSegmentQuery] = useState('');
   const [policiesText, setPoliciesText] = useState('');
   const [savingPolicies, setSavingPolicies] = useState(false);
   const [dryRun, setDryRun] = useState(false);
@@ -55,6 +56,25 @@ export default function AdminPanel({ hotspotActive = true }) {
       setSelectedSegments(new Set(names));
     }
   }, [segmentsInfo]);
+
+  const validatePoliciesJSON = (text) => {
+    try {
+      JSON.parse(text || '{}');
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  };
+
+  const formatPoliciesJSON = () => {
+    try {
+      const parsed = JSON.parse(policiesText || '{}');
+      setPoliciesText(JSON.stringify(parsed, null, 2));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  };
 
   const handleProvisioning = async () => {
     if (!applyVlan && !applyDns) return;
@@ -148,20 +168,48 @@ export default function AdminPanel({ hotspotActive = true }) {
           </div>
 
           <div className="mb-4">
-            <div className="text-xs text-gray-400 mb-2">Assigned segments</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-400">Assigned segments</div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="search"
+                  value={segmentQuery}
+                  onChange={(e) => setSegmentQuery(e.target.value)}
+                  placeholder="Search segments"
+                  className="text-xs px-2 py-1 rounded bg-gray-800 border border-gray-700 w-48"
+                  aria-label="Search segments"
+                />
+                <button type="button" onClick={() => {
+                  // select all visible
+                  const list = (segmentsInfo && segmentsInfo.policies && segmentsInfo.policies.segments) || [];
+                  const filtered = list.filter((s) => s.name.toLowerCase().includes((segmentQuery||'').toLowerCase()) || (s.cidr||'').includes(segmentQuery||''));
+                  const next = new Set(selectedSegments);
+                  filtered.forEach((s) => next.add(s.name));
+                  setSelectedSegments(next);
+                }} className="btn btn-ghost text-xs">Select visible</button>
+                <button type="button" onClick={() => setSelectedSegments(new Set())} className="btn btn-ghost text-xs">Clear</button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               {(segmentsInfo && segmentsInfo.policies && segmentsInfo.policies.segments && segmentsInfo.policies.segments.length) ? (
-                segmentsInfo.policies.segments.map((seg) => (
-                  <label key={seg.name} className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-700 bg-gray-900/30 text-xs text-gray-200 cursor-pointer">
-                    <input type="checkbox" checked={selectedSegments.has(seg.name)} onChange={(e) => {
-                      const next = new Set(selectedSegments);
-                      if (e.target.checked) next.add(seg.name); else next.delete(seg.name);
-                      setSelectedSegments(next);
-                    }} className="w-4 h-4" />
-                    <span className="font-medium">{seg.name}</span>
-                    <span className="text-xs text-gray-400 ml-2">{seg.cidr || ''}</span>
-                  </label>
-                ))
+                segmentsInfo.policies.segments
+                  .filter((seg) => {
+                    if (!segmentQuery || segmentQuery.trim() === '') return true;
+                    const q = segmentQuery.toLowerCase();
+                    return (seg.name || '').toLowerCase().includes(q) || ((seg.cidr||'').toLowerCase().includes(q));
+                  })
+                  .map((seg) => (
+                    <label key={seg.name} className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-700 bg-gray-900/30 text-xs text-gray-200 cursor-pointer">
+                      <input type="checkbox" checked={selectedSegments.has(seg.name)} onChange={(e) => {
+                        const next = new Set(selectedSegments);
+                        if (e.target.checked) next.add(seg.name); else next.delete(seg.name);
+                        setSelectedSegments(next);
+                      }} className="w-4 h-4" aria-label={`Select segment ${seg.name}`} />
+                      <span className="font-medium">{seg.name}</span>
+                      <span className="text-xs text-gray-400 ml-2">{seg.cidr || ''}</span>
+                    </label>
+                  ))
               ) : (
                 <span className="text-xs text-gray-500">No segments defined in policies.json</span>
               )}
@@ -169,9 +217,21 @@ export default function AdminPanel({ hotspotActive = true }) {
           </div>
 
           <div className="mb-4">
-            <div className="text-xs text-gray-400 mb-2">Policies (preview)</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-400">Policies (preview)</div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => {
+                  const res = validatePoliciesJSON(policiesText);
+                  if (res.ok) alert('Valid JSON'); else alert('Invalid JSON: ' + res.error);
+                }} className="btn btn-ghost text-xs">Validate</button>
+                <button type="button" onClick={() => {
+                  const res = formatPoliciesJSON();
+                  if (!res.ok) alert('Format failed: ' + res.error);
+                }} className="btn btn-ghost text-xs">Format</button>
+              </div>
+            </div>
             <div className="mb-2">
-              <textarea value={policiesText} onChange={(e) => setPoliciesText(e.target.value)} className="w-full h-40 text-xs p-2 font-mono bg-gray-800 border border-gray-700 rounded text-gray-200" />
+              <textarea aria-label="Policies JSON editor" value={policiesText} onChange={(e) => setPoliciesText(e.target.value)} className="w-full h-40 text-xs p-2 font-mono bg-gray-800 border border-gray-700 rounded text-gray-200" />
             </div>
           </div>
 
@@ -211,81 +271,37 @@ export default function AdminPanel({ hotspotActive = true }) {
           </div>
           <div className="mt-3 text-xs text-gray-400">Selected segments will be used for provisioning when you click <strong>Start Provisioning</strong>.</div>
           <div className="mt-3 flex items-center gap-2 justify-end">
-            <button
-              onClick={async () => {
-                // Save policies
-                let payload = {};
-                try {
-                  payload = JSON.parse(policiesText || '{}');
-                } catch (e) {
-                  alert('Invalid JSON');
-                  return;
-                }
-                setSavingPolicies(true);
-                try {
-                  const token = localStorage.getItem('PROVISION_TOKEN') || '';
-                  const headers = { 'Content-Type': 'application/json' };
-                  if (token) headers['Authorization'] = `Bearer ${token}`;
-                  const res = await fetch('http://localhost:8000/policies', { method: 'POST', headers, body: JSON.stringify(payload) });
-                  const j = await res.json();
-                  if (j.status === 'ok') {
-                    alert('Policies saved');
-                  } else {
-                    alert('Save failed: ' + (j.error || JSON.stringify(j)));
-                  }
-                } catch (e) {
-                  alert('Save error: ' + e);
-                } finally {
-                  setSavingPolicies(false);
-                }
-              }}
-              disabled={!hotspotActive}
-              className="btn btn-success disabled:opacity-50"
-              title={!hotspotActive ? 'Connect hotspot to save policies' : undefined}
-            >
-              {savingPolicies ? 'Saving...' : 'Save Policies'}
-            </button>
-          </div>
-          <div className="mt-3">
-            <label className={`flex items-center gap-3 ${!hotspotActive ? 'opacity-60' : 'cursor-pointer'} group`}>
-              <input
-                type="checkbox"
-                checked={dryRun}
-                onChange={async (e) => {
-                  const desired = e.target.checked;
-                  // ask for confirmation
-                  const msg = desired ? 'Enable enforcement dry-run? This will simulate enforcement actions (no iptables changes).' : 'Disable dry-run and apply enforcement actions for real?';
-                  const ok = window.confirm(msg + '\n\nThis action will be recorded in the audit log. Proceed?');
-                  if (!ok) {
-                    // revert checkbox visually
-                    e.preventDefault();
-                    e.target.checked = dryRun;
-                    return;
-                  }
-                  setDryRunLoading(true);
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  const v = validatePoliciesJSON(policiesText);
+                  if (!v.ok) { alert('Invalid JSON: ' + v.error); return; }
+                  setSavingPolicies(true);
                   try {
                     const token = localStorage.getItem('PROVISION_TOKEN') || '';
                     const headers = { 'Content-Type': 'application/json' };
                     if (token) headers['Authorization'] = `Bearer ${token}`;
-                    const res = await fetch('http://localhost:8000/enforcer/dryrun', { method: 'POST', headers, body: JSON.stringify({ dry_run: desired }) });
+                    const res = await fetch('http://localhost:8000/policies', { method: 'POST', headers, body: policiesText });
                     const j = await res.json();
-                    if (j.status === 'ok') setDryRun(Boolean(j.dry_run));
-                    else alert('Failed to set dry-run: ' + (j.error || JSON.stringify(j)));
-                  } catch (err) {
-                    alert('Error setting dry-run: ' + err);
+                    if (j.status === 'ok') {
+                      alert('Policies saved');
+                    } else {
+                      alert('Save failed: ' + (j.error || JSON.stringify(j)));
+                    }
+                  } catch (e) {
+                    alert('Save error: ' + e);
                   } finally {
-                    setDryRunLoading(false);
+                    setSavingPolicies(false);
                   }
                 }}
-                className="w-5 h-5 cursor-pointer accent-accent-blue rounded"
-                disabled={tokenStatus !== 'set'}
-              />
-              <span className="text-sm text-gray-200 group-hover:text-white transition">
-                <strong>Enforcement dry-run</strong>
-                <p className="text-xs text-gray-400">When enabled, enforcement actions are simulated and no iptables changes are applied.</p>
-              </span>
-              <div className="ml-auto text-xs text-gray-400">{dryRunLoading ? 'Updating...' : (dryRun ? 'DRY' : 'LIVE')}</div>
-            </label>
+                disabled={!hotspotActive}
+                className="btn btn-success disabled:opacity-50"
+                title={!hotspotActive ? 'Connect hotspot to save policies' : undefined}
+              >
+                {savingPolicies ? 'Saving...' : 'Save Policies'}
+              </button>
+              <button onClick={() => { setPoliciesText('{}'); }} className="btn btn-ghost text-xs">Clear</button>
+            </div>
           </div>
         </motion.div>
 

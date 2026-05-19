@@ -7,15 +7,15 @@ import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '.
 const getCategoryIcon = (category) => {
   switch (category) {
     case 'Mobile':
-      return <Smartphone size={18} />;
+      return <Smartphone size={18} aria-hidden="true" />;
     case 'Computer':
-      return <Monitor size={18} />;
+      return <Monitor size={18} aria-hidden="true" />;
     case 'Camera':
-      return <Camera size={18} />;
+      return <Camera size={18} aria-hidden="true" />;
     case 'Network':
-      return <Router size={18} />;
+      return <Router size={18} aria-hidden="true" />;
     default:
-      return <Cpu size={18} />;
+      return <Cpu size={18} aria-hidden="true" />;
   }
 };
 
@@ -145,21 +145,23 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
         <div className="flex items-center gap-3">
           <span className={`inline-flex items-center gap-2 ${compact ? 'text-[10px]' : 'text-xs'} font-semibold`}>
             <span
-              aria-hidden
-              className={`h-2.5 w-2.5 rounded-full ${isBlocked ? 'bg-red-500' : 'bg-green-400'}`}
+              aria-hidden="true"
+              className={`h-2.5 w-2.5 rounded-full ${isBlocked ? 'bg-red-500' : (online ? 'bg-green-400' : 'bg-gray-400')}`}
               title={device.status}
             />
-            <span className={`${isBlocked ? 'text-red-300' : 'text-green-200'}`}>{isBlocked ? 'Quarantined' : (device.status || 'Unknown')}</span>
+            <span className={`${isBlocked ? 'text-red-300' : (online ? 'text-green-200' : 'text-gray-300')}`} aria-live="polite" role="status">
+              {isBlocked ? 'Quarantined' : (online ? 'Online' : (device.status || 'Offline'))}
+            </span>
           </span>
 
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setCollapsed((s) => !s)} aria-label={collapsed ? 'Expand card' : 'Collapse card'} className="p-1 rounded hover:bg-white/5">
               {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
-            <button type="button" onClick={handleVerify} aria-label={isBlocked ? 'Release device' : 'Allow device'} className="p-1 rounded hover:bg-white/5">
+            <button type="button" onClick={handleVerify} aria-label={isBlocked ? 'Release device' : 'Allow device'} className="p-1 rounded hover:bg-white/5" disabled={!online} aria-disabled={!online}>
               <CheckCircle size={14} className="text-green-300" />
             </button>
-            <button type="button" onClick={handleBlock} aria-label="Block device" className="p-1 rounded hover:bg-white/5">
+            <button type="button" onClick={handleBlock} aria-label="Block device" className="p-1 rounded hover:bg-white/5" disabled={!online} aria-disabled={!online}>
               <ShieldAlert size={14} className="text-red-400" />
             </button>
           </div>
@@ -176,15 +178,15 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             {vendor.token}
           </div>
           <div>
-            <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold leading-tight`}>{displayName}</h3>
+            <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold leading-tight max-w-[220px] truncate`} title={displayName}>{displayName}</h3>
             <p className="text-xs text-gray-400">{vendor.name} • {category}</p>
           </div>
         </div>
         <div className={`mt-2 flex flex-wrap gap-2 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
           <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-300 font-mono">{device.ip}</span>
           <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-400 font-mono">{device.mac}</span>
-          <span className={`px-2 py-1 rounded-full border ${online ? 'border-green-500/30 text-green-300 bg-green-950/20' : 'border-gray-700 text-gray-400 bg-gray-900/40'}`}>
-            {online ? 'Online' : 'Offline'} {/* Display online/offline status */}
+          <span className={`px-2 py-1 rounded-full border ${isBlocked ? 'border-red-500/30 text-red-300 bg-red-950/10' : (online ? 'border-green-500/30 text-green-300 bg-green-950/10' : 'border-gray-700 text-gray-400 bg-gray-900/40')}`} aria-live="polite" role="status">
+            {isBlocked ? 'Quarantined' : (online ? 'Online' : 'Offline')} {/* Display online/offline status */}
           </span>
           <span className="px-2 py-1 rounded-full border border-blue-500/20 text-blue-300 bg-blue-950/20">
             {getDisplayName(device)}
@@ -262,7 +264,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
               </div>
               <div className="flex items-center gap-2">
                 <input type="text" value={segmentInput} onChange={(e) => setSegmentInput(e.target.value)} placeholder="custom segment" className="w-full px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm" />
-                <button type="button" onClick={() => handleSetSegment()} disabled={savingSegment || !online} className="btn btn-primary text-sm inline-flex items-center gap-1" title={!online ? 'Device offline — connect hotspot to change segment' : undefined}>
+                <button type="button" onClick={() => handleSetSegment()} disabled={savingSegment || !online} aria-disabled={savingSegment || !online} className="btn btn-primary text-sm inline-flex items-center gap-1" title={!online ? 'Device offline — connect hotspot to change segment' : undefined}>
                   {savingSegment ? 'Saving' : 'Set'}
                 </button>
               </div>
@@ -300,6 +302,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             <button
               onClick={handleSetLimit}
               disabled={savingLimit || !online}
+              aria-disabled={savingLimit || !online}
               className="btn btn-primary text-sm inline-flex items-center gap-1"
               title={!online ? 'Device offline — connect hotspot to change limit' : undefined}
             >
@@ -338,6 +341,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             onClick={handleVerify}
             className="flex-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2"
             disabled={!online}
+            aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to verify' : undefined}
           >
             <CheckCircle size={14} />
@@ -347,6 +351,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             onClick={handleBlock}
             className="flex-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2"
             disabled={!online}
+            aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to block' : undefined}
           >
             <ShieldAlert size={14} />

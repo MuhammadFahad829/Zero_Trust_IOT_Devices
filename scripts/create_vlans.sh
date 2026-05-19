@@ -41,27 +41,24 @@ for s in segs:
         print(f"sudo ip link add name {br} type bridge || true")
         print(f"sudo ip link set dev {br} up")
         print(f"sudo ip link set dev {iface} master {br}")
-        # note: IP addressing/dnsmasq is created separately
     elif iface:
         print(f"# SEGMENT {name} -> iface {iface} (no vlan_id)")
         print(f"sudo ip link set dev {iface} up")
     else:
         print(f"# SEGMENT {name} has no iface/vlan configured; skipping L2 provisioning")
-
 PY
 
 if [ "$APPLY" = true ]; then
   echo "Applying changes... (already printed commands above)"
-  # Re-run python to execute commands directly
-    python3 - "$POLICIES" <<'PY'
+  python3 - "$POLICIES" <<'PY'
 import json,sys,subprocess
 from pathlib import Path
 p=Path(sys.argv[1])
 try:
-        data=json.load(p.open())
+    data=json.load(p.open())
 except Exception as e:
-        print('# failed to parse policies JSON during apply:', e)
-        sys.exit(1)
+    print('# failed to parse policies JSON during apply:', e)
+    sys.exit(1)
 segs=data.get('segments', [])
 for s in segs:
     name=s.get('name')
@@ -69,15 +66,27 @@ for s in segs:
     vlan=s.get('vlan_id')
     if iface and vlan:
         parent=iface.split('.')[0]
-        subprocess.run(["sudo","ip","link","add","link",parent,"name",iface,"type","vlan","id",str(vlan)])
+        # only add vlan iface if it doesn't already exist
+        check = subprocess.run(["ip","link","show",iface], capture_output=True, text=True)
+        if check.returncode != 0:
+            subprocess.run(["sudo","ip","link","add","link",parent,"name",iface,"type","vlan","id",str(vlan)])
         subprocess.run(["sudo","ip","link","set","dev",iface,"up"])
         br=f"br-{name}"
-        subprocess.run(["sudo","ip","link","add","name",br,"type","bridge"], check=False)
+        # create bridge only if missing
+        br_check = subprocess.run(["ip","link","show",br], capture_output=True, text=True)
+        if br_check.returncode != 0:
+            subprocess.run(["sudo","ip","link","add","name",br,"type","bridge"], check=False)
         subprocess.run(["sudo","ip","link","set","dev",br,"up"])
-        subprocess.run(["sudo","ip","link","set","dev",iface,"master",br])
+        # attach iface to bridge if not already attached
+        try:
+            with open(f"/sys/class/net/{iface}/master", "r") as _:
+                already_master = True
+        except Exception:
+            already_master = False
+        if not already_master:
+            subprocess.run(["sudo","ip","link","set","dev",iface,"master",br])
     elif iface:
         subprocess.run(["sudo","ip","link","set","dev",iface,"up"], check=False)
-
 PY
 fi
 

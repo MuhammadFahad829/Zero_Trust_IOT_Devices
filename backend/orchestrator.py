@@ -1,93 +1,163 @@
 from scapy.all import sniff, ARP, IP, conf
 import threading
 from typing import Callable, Optional
+import os
+import re
+
+# simple in-memory cache to avoid repeated OUI lookups
+_OUI_CACHE = {}
+# optional external OUI mapping loaded from a file (env: ZT_OUI_FILE)
+_EXTRA_OUI_MAP = {}
+_OUI_LOADED = False
+
+
+def _load_external_oui(path: str):
+    """Load an external OUI file into _EXTRA_OUI_MAP.
+
+    Supported formats:
+    - CSV: "AA:BB:CC,Vendor Name" or "AABBCC,Vendor Name"
+    - IEEE oui.txt lines like "00-00-00   (hex)        XEROX CORPORATION"
+    """
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                # try CSV first
+                if "," in line:
+                    parts = [p.strip() for p in line.split(",", 1)]
+                    if len(parts) == 2:
+                        oui_raw, vendor = parts
+                        oui = re.sub(r"[^0-9A-Fa-f]", "", oui_raw).lower()
+                        if len(oui) >= 6:
+                            _EXTRA_OUI_MAP[oui[:6]] = vendor
+                        continue
+
+                # IEEE formatted: 00-00-00   (hex)        VENDOR
+                m = re.match(r"^([0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}).+?\s{2,}(.+)$", line)
+                if m:
+                    oui_raw = m.group(1)
+                    vendor = m.group(2).strip()
+                    oui = re.sub(r"[^0-9A-Fa-f]", "", oui_raw).lower()
+                    if len(oui) >= 6:
+                        _EXTRA_OUI_MAP[oui[:6]] = vendor
+                        continue
+
+                # fallback: try to extract first hex sequence
+                m2 = re.search(r"([0-9A-Fa-f]{6,})", line)
+                if m2:
+                    oui = m2.group(1)[:6].lower()
+                    vendor = line[m2.end():].strip() or line
+                    _EXTRA_OUI_MAP[oui] = vendor
+    except Exception:
+        # best-effort: don't fail startup if file unreadable
+        return
+
+
+def _ensure_oui_loaded():
+    global _OUI_LOADED
+    if _OUI_LOADED:
+        return
+    # Priority: env ZT_OUI_FILE -> repo deploy/oui.txt or deploy/ouidb.csv
+    path = os.environ.get("ZT_OUI_FILE")
+    if not path:
+        # backend file path relative to this file
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        cand1 = os.path.join(base, "deploy", "oui.txt")
+        cand2 = os.path.join(base, "deploy", "ouidb.csv")
+        if os.path.exists(cand1):
+            path = cand1
+        elif os.path.exists(cand2):
+            path = cand2
+
+    if path and os.path.exists(path):
+        _load_external_oui(path)
+
+    _OUI_LOADED = True
 
 
 def _lookup_oui(mac: str) -> str:
-    """Resolve a MAC address to a vendor name using Scapy's local OUI database."""
+    """Resolve a MAC address to a vendor name using Scapy's local OUI database.
+
+    Caches results and handles locally-administered/randomized MACs.
+    """
     if not mac:
         return "Unknown"
+
+    mac_norm = mac.lower()
+    _ensure_oui_loaded()
+    if mac_norm in _OUI_CACHE:
+        return _OUI_CACHE[mac_norm]
 
     try:
         first_octet = int(mac.split(":", 1)[0], 16)
         # Locally administered MACs are commonly randomized on phones.
         if first_octet & 0x02:
-            return "Private/Randomized MAC"
+            _OUI_CACHE[mac_norm] = "Private/Randomized"
+            return "Private/Randomized"
 
-        resolved = conf.manufdb.lookup(mac)
+        resolved = None
+        # check external OUI map (prefix match) first
+        try:
+            prefix = re.sub(r"[^0-9a-f]", "", mac_norm)[:6]
+            if prefix and prefix in _EXTRA_OUI_MAP:
+                vendor = _EXTRA_OUI_MAP[prefix]
+                _OUI_CACHE[mac_norm] = vendor
+                return vendor
+        except Exception:
+            pass
+
+        try:
+            resolved = conf.manufdb.lookup(mac)
+        except Exception:
+            resolved = None
+
         if isinstance(resolved, tuple):
             vendor = resolved[1] or resolved[0]
         else:
             vendor = resolved
+
         vendor = (vendor or "").strip()
-        if not vendor or vendor.lower() == mac.lower():
-            return "Unknown"
+        if not vendor or vendor.lower() == mac_norm:
+            vendor = "Unknown"
+
+        _OUI_CACHE[mac_norm] = vendor
         return vendor
     except Exception:
+        _OUI_CACHE[mac_norm] = "Unknown"
         return "Unknown"
 
 
 def _detect_device_type(vendor: str, mac: str = None) -> str:
-    """Detect device type category (Mobile, Camera, Smart Speaker, etc.) based on vendor."""
+    """Detect device category: return one of [Mobile, Computer, Camera, Network, IoT, Other, Unknown]."""
     if not vendor:
         return "Unknown"
-    
+
     vendor_lower = vendor.lower()
-    
-    # Mobile Phones & Tablets
-    mobile_keywords = ("apple", "samsung", "xiaomi", "oppo", "vivo", "realme", "oneplus", "motorola", "htc", "nokia", "huawei", "pixel", "lg electronics", "iphone", "ipad")
-    if any(kw in vendor_lower for kw in mobile_keywords):
+
+    # Canonical categories used by frontend
+    if any(k in vendor_lower for k in ("apple", "samsung", "xiaomi", "oppo", "vivo", "oneplus", "motorola", "huawei", "pixel", "iphone", "ipad", "android")):
         return "Mobile"
-    
-    # Cameras & Surveillance
-    camera_keywords = ("hikvision", "dahua", "wyze", "reolink", "logitech", "gopro", "dji", "camera", "webcam")
-    if any(kw in vendor_lower for kw in camera_keywords):
-        return "Camera"
-    
-    # Smart Speakers & Voice Assistants
-    speaker_keywords = ("amazon", "google", "echo", "home", "nest", "sonos", "bose")
-    if any(kw in vendor_lower for kw in speaker_keywords):
-        return "Smart Speaker"
-    
-    # Smart Home Hubs & Routers
-    router_keywords = ("tp-link", "d-link", "netgear", "asus", "linksys", "tenda", "router", "mesh", "wifi")
-    if any(kw in vendor_lower for kw in router_keywords):
-        return "Router/Hub"
-    
-    # Smart Lights & Bulbs
-    light_keywords = ("philips hue", "wyze", "nanoleaf", "lifx", "yeelight", "smartbulb", "lightbulb")
-    if any(kw in vendor_lower for kw in light_keywords):
-        return "Smart Light"
-    
-    # Smart Appliances (fans, switches, plugs, thermostats)
-    appliance_keywords = ("fan", "switch", "plug", "outlet", "thermostat", "ac", "heater", "smart home", "iot")
-    if any(kw in vendor_lower for kw in appliance_keywords):
-        return "Smart Appliance"
-    
-    # Laptops & Desktop
-    computer_keywords = ("dell", "hp", "lenovo", "asus", "acer", "msi", "razer", "macbook", "intel")
-    if any(kw in vendor_lower for kw in computer_keywords):
+
+    if any(k in vendor_lower for k in ("dell", "hp", "lenovo", "acer", "msi", "razer", "macbook", "intel", "asus")):
         return "Computer"
-    
-    # Printers
-    printer_keywords = ("brother", "canon", "epson", "hp", "xerox", "ricoh", "printer")
-    if any(kw in vendor_lower for kw in printer_keywords):
-        return "Printer"
-    
-    # Gaming Devices
-    gaming_keywords = ("nintendo", "sony", "playstation", "xbox", "steam", "gaming")
-    if any(kw in vendor_lower for kw in gaming_keywords):
-        return "Gaming Device"
-    
-    # Wearables
-    wearable_keywords = ("fitbit", "garmin", "apple watch", "smartwatch", "wearable", "band")
-    if any(kw in vendor_lower for kw in wearable_keywords):
-        return "Wearable"
-    
-    # Private/Randomized
+
+    if any(k in vendor_lower for k in ("hikvision", "dahua", "wyze", "reolink", "logitech", "gopro", "dji", "camera", "webcam")):
+        return "Camera"
+
+    if any(k in vendor_lower for k in ("tp-link", "d-link", "netgear", "asus", "linksys", "router", "ubiquiti", "mikrotik", "tenda", "wifi", "mesh")):
+        return "Network"
+
+    # IoT umbrella: smart bulbs, plugs, thermostats, appliances, voice assistants
+    if any(k in vendor_lower for k in ("philips", "hue", "lifx", "yeelight", "sonoff", "tuya", "smart", "iot", "switch", "plug", "thermostat", "nest", "amazon", "alexa", "echo", "google home")):
+        return "IoT"
+
     if "private" in vendor_lower or "randomized" in vendor_lower:
         return "Unknown"
-    
+
     return "Other"
 
 

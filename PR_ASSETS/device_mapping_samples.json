@@ -1,0 +1,10 @@
+[
+  {"ip": "10.0.0.10", "mac": "11:22:33:44:55:66", "vendor": "Apple", "device_type": "Mobile", "expected_segment": "personal"},
+  {"ip": "10.0.0.11", "mac": "aa:aa:aa:aa:aa:aa", "vendor": "HP", "device_type": "Computer", "expected_segment": "work"},
+  {"ip": "10.0.0.12", "mac": "00:11:22:33:44:55", "vendor": "TP-Link", "device_type": "Network", "expected_segment": "network"},
+  {"ip": "10.0.0.13", "mac": "66:77:88:99:aa:bb", "vendor": "Hikvision", "device_type": "Camera", "expected_segment": "camera"},
+  {"ip": "10.0.0.14", "mac": "00:00:00:00:00:01", "vendor": "Philips Hue", "device_type": "IoT", "expected_segment": "iot"},
+  {"ip": "10.0.0.15", "mac": "de:ad:be:ef:00:01", "vendor": "Private/Randomized", "device_type": "Unknown", "expected_segment": "private"},
+  {"ip": "10.0.0.16", "mac": "44:55:66:77:88:99", "vendor": "Samsung", "device_type": "Mobile", "expected_segment": "personal"},
+  {"ip": "10.0.0.17", "mac": "88:99:aa:bb:cc:dd", "vendor": "Amazon Alexa", "device_type": "IoT", "expected_segment": "iot"}
+]

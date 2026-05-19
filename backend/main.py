@@ -775,6 +775,16 @@ async def startup_tasks():
     except Exception:
         pass
 
+    # Start optional Prometheus metrics exporter if available
+    try:
+        import metrics_exporter
+        import threading as _threading
+        _threading.Thread(target=metrics_exporter.run, daemon=True).start()
+        print('[*] Metrics exporter thread started (scrapes /traffic -> :8001)')
+    except Exception:
+        # exporter optional; continue silently if missing deps
+        pass
+
 
     def _run_provisioning(apply_vlan: bool = False, apply_dns: bool = False) -> dict:
         """Run system provisioning steps synchronously. Returns result dict."""

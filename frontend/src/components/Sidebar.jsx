@@ -12,61 +12,7 @@ const extraItems = [
   { name: 'Administration', icon: Settings, tab: 'admin', section: 'Control' },
 ];
 
-const MoreSection = ({ extraItems = [], activeTab, setActiveTab, onCloseMobile, threatCount = 0, hotspotActive = true }) => {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div>
-      <div className="mb-2">
-        <button
-          type="button"
-          onClick={() => setOpen((s) => !s)}
-          aria-expanded={open}
-          className="w-full flex items-center justify-between gap-3 px-4 py-2 rounded-lg text-sm bg-gray-900/10 border border-gray-800/40"
-        >
-          <span>More</span>
-          <span className="text-xs text-gray-400">{open ? 'Hide' : 'Show'}</span>
-        </button>
-      </div>
-
-      {open && (
-        <div className="space-y-2">
-          {extraItems.map((item) => {
-            const isActive = activeTab === item.tab;
-            const Icon = item.icon;
-            const disabled = (item.tab === 'topology' || item.tab === 'admin') && !hotspotActive;
-            return (
-              <button
-                key={item.tab}
-                onClick={() => {
-                  if (disabled) return;
-                  setActiveTab(item.tab);
-                  if (onCloseMobile) onCloseMobile();
-                }}
-                title={disabled ? 'Connect hotspot to enable' : undefined}
-                aria-current={isActive ? 'page' : undefined}
-                aria-disabled={disabled ? 'true' : undefined}
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
-                  isActive
-                    ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
-                    : disabled
-                      ? 'text-gray-600 bg-gray-900/10 border-gray-800/30 cursor-not-allowed'
-                      : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="font-medium">{item.name}</span>
-                {item.tab === 'threats' && threatCount > 0 && (
-                  <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
+// Render extra navigation items directly to improve discoverability
 
 const Sidebar = ({
   activeTab,
@@ -146,14 +92,45 @@ const Sidebar = ({
           </div>
         </div>
 
-        <MoreSection
-            extraItems={extraItems}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            onCloseMobile={onCloseMobile}
-            threatCount={threatCount}
-            hotspotActive={hotspotActive}
-          />
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
+            <Layers size={12} />
+            <span>More</span>
+          </div>
+          <div className="space-y-2">
+            {extraItems.map((item) => {
+              const isActive = activeTab === item.tab;
+              const Icon = item.icon;
+              const disabled = (item.tab === 'topology' || item.tab === 'admin') && !hotspotActive;
+              return (
+                <button
+                  key={item.tab}
+                  onClick={() => {
+                    if (disabled) return;
+                    setActiveTab(item.tab);
+                    if (onCloseMobile) onCloseMobile();
+                  }}
+                  title={disabled ? 'Connect hotspot to enable' : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-disabled={disabled ? 'true' : undefined}
+                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
+                    isActive
+                      ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
+                      : disabled
+                        ? 'text-gray-600 bg-gray-900/10 border-gray-800/30 cursor-not-allowed'
+                        : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="font-medium">{item.name}</span>
+                  {item.tab === 'threats' && threatCount > 0 && (
+                    <span className="ml-auto bg-accent-red text-white text-[10px] px-2 py-1 rounded-full">{threatCount}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </nav>
 
       {deviceSegmentFilters && deviceSegmentFilters.length > 0 && (
