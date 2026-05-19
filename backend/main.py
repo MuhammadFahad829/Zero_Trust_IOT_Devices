@@ -795,9 +795,17 @@ async def startup_tasks():
                 policies_to_use = temp_policies
 
             if apply_vlan:
-                cmd = [os.path.join(scripts_dir, 'create_vlans.sh'), policies_to_use, '--apply']
-                result['steps'].append({'cmd': ' '.join(cmd)})
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                create_script = os.path.join(scripts_dir, 'create_vlans.sh')
+                # If enforcer is running in dry-run, run the script in preview mode (no --apply)
+                if enforcer.dry_run:
+                    cmd = [create_script, policies_to_use]
+                    result['steps'].append({'cmd': ' '.join(cmd), 'mode': 'preview'})
+                    # run to capture preview output; the script prints commands without applying
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
+                else:
+                    cmd = [create_script, policies_to_use, '--apply']
+                    result['steps'].append({'cmd': ' '.join(cmd), 'mode': 'apply'})
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             # Generate dnsmasq configs
             cmd2 = [os.path.join(scripts_dir, 'generate_dnsmasq_conf.sh'), policies_to_use, os.path.join(repo_root, 'deploy', 'dnsmasq')]
@@ -908,6 +916,11 @@ async def set_enforcer_dryrun(payload: dict = None, authorization: Optional[str]
     dry = bool(body.get('dry_run', False))
     try:
         enforcer.set_dry_run(dry)
+        # Audit log the dry-run toggle
+        try:
+            database.add_log('DRYRUN_TOGGLE', detail=str({'dry_run': dry}))
+        except Exception:
+            pass
         return {"status": "ok", "dry_run": bool(enforcer.dry_run)}
     except Exception as e:
         return {"status": "error", "error": str(e)}
