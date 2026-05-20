@@ -354,18 +354,42 @@ class EnforcementEngine:
         granted_any = False
         all_ok = True
         for candidate in candidate_ifaces:
-            check_cmd = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
-            if self._check_cmd(check_cmd):
-                print(f"[SUCCESS] Access already granted to {ip} on {candidate}")
+            # Prefer a rule that explicitly allows forwarding from the device to the WAN interface
+            check_cmd_wan = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+            if self._check_cmd(check_cmd_wan):
+                print(f"[SUCCESS] Internet access already granted to {ip} on {candidate} -> {self.wan}")
                 granted_any = True
                 continue
 
-            add_cmd = f"sudo iptables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
-            if self._run_cmd(add_cmd):
-                print(f"[SUCCESS] Access granted to {ip} on {candidate}")
+            add_cmd_wan = f"sudo iptables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+            if self._run_cmd(add_cmd_wan):
+                print(f"[SUCCESS] Internet access granted to {ip} on {candidate} -> {self.wan}")
                 granted_any = True
             else:
-                all_ok = False
+                # If this is an IPv6 address, attempt ip6tables equivalent
+                if ':' in ip:
+                    check_cmd6 = f"sudo ip6tables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+                    if self._check_cmd(check_cmd6):
+                        print(f"[SUCCESS] Internet access already granted (IPv6) to {ip} on {candidate} -> {self.wan}")
+                        granted_any = True
+                        continue
+                    add_cmd6 = f"sudo ip6tables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+                    if self._run_cmd(add_cmd6):
+                        print(f"[SUCCESS] Internet access granted (IPv6) to {ip} on {candidate} -> {self.wan}")
+                        granted_any = True
+                        continue
+                # fallback: allow forwarding regardless of output iface (backwards compatibility)
+                check_cmd = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
+                if self._check_cmd(check_cmd):
+                    print(f"[SUCCESS] Access already granted to {ip} on {candidate}")
+                    granted_any = True
+                    continue
+                add_cmd = f"sudo iptables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
+                if self._run_cmd(add_cmd):
+                    print(f"[SUCCESS] Access granted to {ip} on {candidate}")
+                    granted_any = True
+                else:
+                    all_ok = False
 
         return granted_any and all_ok
 
@@ -379,6 +403,30 @@ class EnforcementEngine:
         # Attempt to delete matching rules repeatedly until none remain.
         # Use _run_cmd which respects dry-run. In dry-run we avoid infinite loops by breaking after one attempt.
         for candidate in candidate_ifaces:
+            # remove WAN-specific accept rules first
+            del_cmd_wan = f"sudo iptables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+            while True:
+                ok = self._run_cmd(del_cmd_wan)
+                if ok:
+                    removed_any = True
+                    if self.dry_run:
+                        break
+                    continue
+                break
+
+            # IPv6 specific deletions
+            if ':' in ip:
+                del_cmd6_wan = f"sudo ip6tables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -o {shlex.quote(self.wan)} -j ACCEPT"
+                while True:
+                    ok6 = self._run_cmd(del_cmd6_wan)
+                    if ok6:
+                        removed_any = True
+                        if self.dry_run:
+                            break
+                        continue
+                    break
+
+            # then remove any more generic accept rules
             del_cmd = f"sudo iptables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
             while True:
                 ok = self._run_cmd(del_cmd)
@@ -386,7 +434,6 @@ class EnforcementEngine:
                     removed_any = True
                     if self.dry_run:
                         break
-                    # continue trying to remove duplicates
                     continue
                 break
 

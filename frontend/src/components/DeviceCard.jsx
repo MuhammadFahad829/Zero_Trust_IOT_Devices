@@ -280,14 +280,14 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
 
       {!compact ? (
         <div className="mt-3 bg-gray-900/35 border border-gray-700 rounded-lg p-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs text-gray-300">
               <Gauge size={14} />
               Per-device limit (MB)
             </div>
             <span className="text-[11px] text-gray-500">Current: {Number(device.mb_limit || 100).toFixed(0)} MB</span>
           </div>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-col sm:flex-row items-center gap-2 w-full">
             <input
               type="number"
               min="1"
@@ -301,7 +301,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
               onClick={handleSetLimit}
               disabled={savingLimit || !online}
               aria-disabled={savingLimit || !online}
-              className="btn btn-primary text-sm inline-flex items-center gap-1"
+              className="btn btn-primary text-sm inline-flex items-center gap-1 w-full sm:w-auto"
               title={!online ? 'Device offline — connect hotspot to change limit' : undefined}
             >
               <Save size={14} />
@@ -334,10 +334,10 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </div>
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button
             onClick={handleVerify}
-            className="col-span-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
+            className="col-span-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg w-full"
             disabled={!online}
             aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to verify' : undefined}
@@ -347,7 +347,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </button>
           <button
             onClick={handleBlock}
-            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
+            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg w-full"
             disabled={!online}
             aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to block' : undefined}
@@ -357,7 +357,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </button>
           <button
             onClick={() => setOpenDetails((s) => !s)}
-            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
+            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg w-full"
             aria-pressed={openDetails}
             aria-label="Toggle details"
           >

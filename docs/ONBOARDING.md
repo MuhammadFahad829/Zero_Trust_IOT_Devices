@@ -1,4 +1,4 @@
-# Onboarding & Operations — ZeroTrustMaster
+# Onboarding & Operations — ZeroTrust IoT Gateway
 
 This document describes local development, provisioning, segmentation macros, VLAN provisioning, and rollback steps.
 

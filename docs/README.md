@@ -1,4 +1,4 @@
-# ZeroTrustMaster
+# ZeroTrust IoT Gateway
 
 Zero-Trust IoT gateway with a React dashboard, FastAPI backend, and network provisioning helpers.
 
@@ -46,8 +46,8 @@ npm start
 
 ## Service Files
 
-- `deploy/zerotrust-exporter.service` runs the Prometheus exporter.
-- `deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
+-- `infra/deploy/zerotrust-exporter.service` runs the Prometheus exporter.
+-- `infra/deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
 
 ## Useful Commands
 
@@ -59,4 +59,4 @@ curl http://127.0.0.1:8000/traffic
 curl http://127.0.0.1:8001/metrics
 ```
 
-The full saved command list is available in `docs/COMMANDS.md`.
+The full saved command list is available in `docs/commands.md`.

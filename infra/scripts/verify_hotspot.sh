@@ -173,9 +173,9 @@ echo ""
 print_header "6. Checking LAN Network Status"
 echo ""
 
-LAN_IP=$(ip -4 -o addr show "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+LAN_IP=$(ip -4 -o addr show "$LAN_INTERFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
 if [ -z "$LAN_IP" ]; then
-    print_warning "No IP address on LAN interface ($LAN_IFACE)"
+    print_warning "No IP address on LAN interface ($LAN_INTERFACE)"
 else
     print_success "LAN Interface IP: $LAN_IP"
 fi

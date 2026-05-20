@@ -37,6 +37,18 @@ const Sidebar = ({
       role="navigation"
       aria-label="Main sidebar navigation"
     >
+      {/* Close button for mobile */}
+      {mobileOpen && (
+        <div className="md:hidden absolute top-3 right-3">
+          <button
+            aria-label="Close sidebar"
+            onClick={() => onCloseMobile && onCloseMobile()}
+            className="px-3 py-2 rounded-lg bg-gray-900/50 text-gray-200"
+          >
+            Close
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-3 sm:gap-4 mb-8 sm:mb-10">
         <div className="shrink-0 p-2.5 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
           <ShieldCheck size={28} />
@@ -79,7 +91,7 @@ const Sidebar = ({
                     if (onCloseMobile) onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
+                  className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
                     isActive
                       ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
                       : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
@@ -114,7 +126,7 @@ const Sidebar = ({
                   title={disabled ? 'Connect hotspot to enable' : undefined}
                   aria-current={isActive ? 'page' : undefined}
                   aria-disabled={disabled ? 'true' : undefined}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
+                  className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
                     isActive
                       ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
                       : disabled

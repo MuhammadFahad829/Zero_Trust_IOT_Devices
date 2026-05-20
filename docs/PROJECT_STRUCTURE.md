@@ -1,8 +1,8 @@
-# Project Structure — ZeroTrustMaster
+# Project Structure — ZeroTrust IoT Gateway
 
 This document describes the recommended folder and file layout for the project and quick notes for maintenance.
 
-- ZeroTrustMaster/
+- ZeroTrust IoT Gateway/
   - backend/
     - main.py — FastAPI app & startup
     - monitor.py — TrafficMonitor and packet capture
@@ -29,20 +29,28 @@ This document describes the recommended folder and file layout for the project a
       - utils/ — frontend helpers
     - public/
     - build/ — generated production build (remove from repo)
-  - scripts/
-    - create_vlans.sh
-    - generate_dnsmasq_conf.sh
-    - run_all.sh
-    - run-backend.sh
-    - stop-backend.sh
-    - verify_iptables.sh
-    - assert_iptables.sh
+  - infra/
+    - scripts/
+      - create_vlans.sh
+      - generate_dnsmasq_conf.sh
+      - run_all.sh
+      - run-backend.sh
+      - stop-backend.sh
+      - verify_iptables.sh
+      - assert_iptables.sh
   - tests/
     - integration/
       - run_integration_tests.sh
-  - infra/
-    - docker-compose.yml
-    - k8s/ — optional deployment manifests
+    - ci/
+      - playwright.config.js
+    - infra/
+      - deploy/
+        - zerotrust-exporter.service
+        - zerotrust-vlans.service
+      - scripts/
+        - create_vlans.sh
+        - generate_dnsmasq_conf.sh
+      - dnsmasq/ — generated DNS configs
   - docs/
     - PROJECT_STRUCTURE.md (this file)
     - README.md

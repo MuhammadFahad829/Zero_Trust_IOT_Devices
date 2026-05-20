@@ -133,6 +133,11 @@ body {
 /* Additional polish for consistent layout and spacing */
 main.main-content { max-width: 1200px; margin: 0 auto; }
 
+/* Ensure main content is offset when sidebar is visible on larger screens */
+@media (min-width: 768px) {
+	main.main-content { margin-left: 16rem; }
+}
+
 .card-soft--polished { padding: 1.05rem; box-shadow: 0 12px 36px rgba(2,6,23,0.5); border: 1px solid rgba(255,255,255,0.03); }
 .btn { border-radius: 0.6rem; }
 

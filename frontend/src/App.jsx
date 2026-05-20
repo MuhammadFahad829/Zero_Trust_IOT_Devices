@@ -21,6 +21,13 @@ const App = () => {
   const [totalBandwidth, setTotalBandwidth] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [hotspotActive, setHotspotActive] = useState(true);
+  const [devMode, setDevMode] = useState(() => {
+    try {
+      return localStorage.getItem('devHotspot') === '1';
+    } catch (e) {
+      return false;
+    }
+  });
   const [selectedDevices, setSelectedDevices] = useState(new Set());
   const [segmentFilter, setSegmentFilter] = useState('all');
   const [bulkSegment, setBulkSegment] = useState('');
@@ -33,17 +40,37 @@ const App = () => {
       const data = await res.json();
       // backend may return hotspot_active or hotspotActive
       const val = data?.hotspot_active ?? data?.hotspotActive ?? data?.hotspot ?? false;
-      setHotspotActive(Boolean(val));
+      // allow devMode to override the backend mode for local testing
+      setHotspotActive(Boolean(val) || devMode);
     } catch (err) {
       // keep last known state on error
     }
   };
+
+  // persist dev mode and ensure hotspotActive reflects it immediately
+  useEffect(() => {
+    try {
+      if (devMode) {
+        localStorage.setItem('devHotspot', '1');
+      } else {
+        localStorage.removeItem('devHotspot');
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+    if (devMode) setHotspotActive(true);
+  }, [devMode]);
 
   useEffect(() => {
     fetchMode();
     const modeInterval = setInterval(fetchMode, 10000);
     const onRefresh = () => fetchMode();
     window.addEventListener('refresh:mode', onRefresh);
+    const onNavigateDevices = () => {
+      setActiveTab('devices');
+      setMobileSidebarOpen(false);
+    };
+    window.addEventListener('navigate:devices', onNavigateDevices);
     const ws = new WebSocket('ws://localhost:8000/ws');
 
     ws.onmessage = (event) => {
@@ -153,6 +180,7 @@ const App = () => {
       clearInterval(devInterval);
       clearInterval(modeInterval);
       window.removeEventListener('refresh:mode', onRefresh);
+      window.removeEventListener('navigate:devices', onNavigateDevices);
     };
   }, []);
 
@@ -246,6 +274,20 @@ const App = () => {
       setSelectedDevices(new Set());
     } catch (err) {
       console.error('Failed to apply bulk limit:', err);
+    }
+  };
+
+  // Apply a limit to a specific list of IPs (used by Segmentation for per-segment limits)
+  const handleLimitForIps = async (ips = [], mbLimit) => {
+    if (!Array.isArray(ips) || ips.length === 0) return;
+    try {
+      for (const ip of ips) {
+        await fetch(`http://localhost:8000/limit/${ip}/${Number(mbLimit)}`, { method: 'POST' });
+      }
+      const ipSet = new Set(ips);
+      setDevices((prev) => prev.map((d) => (ipSet.has(d.ip) ? { ...d, mb_limit: Number(mbLimit) } : d)));
+    } catch (err) {
+      console.error('Failed to apply limit for IPs:', err);
     }
   };
 
@@ -359,6 +401,17 @@ const App = () => {
                   <span className="block text-[10px] text-gray-500 uppercase tracking-widest">Quarantined</span>
                   <span className="text-2xl font-bold">{quarantinedCount}</span>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-400 mr-2">Dev hotspot</label>
+                <button
+                  type="button"
+                  onClick={() => setDevMode((v) => !v)}
+                  className={`px-3 py-1 rounded-lg border ${devMode ? 'bg-green-600 border-green-500' : 'bg-gray-800 border-gray-700'}`}
+                >
+                  {devMode ? 'ON' : 'OFF'}
+                </button>
               </div>
             </div>
           </motion.div>
@@ -775,6 +828,7 @@ const App = () => {
               setSelectedDevices={setSelectedDevices}
               handleBulkLimit={handleBulkLimit}
               handleBulkSegment={handleBulkSegment}
+              handleLimitForIps={handleLimitForIps}
             />
           </div>
         )}

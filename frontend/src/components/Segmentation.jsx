@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import DeviceLimitsGraph from './DeviceLimitsGraph';
+import SegmentLimitControl from './SegmentLimitControl';
 
-export default function Segmentation({ devices = [], availableSegments = [], selectedDevices = new Set(), setSelectedDevices, handleBulkLimit, handleBulkSegment }) {
+export default function Segmentation({ devices = [], availableSegments = [], selectedDevices = new Set(), setSelectedDevices, handleBulkLimit, handleBulkSegment, handleLimitForIps }) {
+  
   const [selectedSegment, setSelectedSegment] = useState('all');
   const [bulkLimitInput, setBulkLimitInput] = useState('');
   const [activePresetGroup, setActivePresetGroup] = useState('personal');
@@ -124,7 +126,9 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
           </div>
 
           <div className="mt-5">
-            <DeviceLimitsGraph devices={filtered} />
+            <div className="w-full min-h-[240px] overflow-auto">
+              <DeviceLimitsGraph devices={filtered} />
+            </div>
           </div>
         </div>
 
@@ -161,6 +165,14 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
                 Apply Limit
               </button>
             </div>
+
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Set limit for current segment (MB)</label>
+                        <SegmentLimitControl
+                          devices={filtered}
+                          handleLimitForIps={handleLimitForIps}
+                        />
+                      </div>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-300 mb-2">Grouped presets</label>

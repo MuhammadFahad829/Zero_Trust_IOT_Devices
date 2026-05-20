@@ -7,6 +7,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:e2e": "npx playwright test",
     "eject": "react-scripts eject"
   },
   "dependencies": {
@@ -21,6 +22,10 @@
     "postcss": "^8.4.24",
     "autoprefixer": "^10.4.14"
   },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+  ,
   "browserslist": {
     "production": [
       ">0.2%",

@@ -24,7 +24,7 @@ export default function TopDevices({ devices = [], onVerify = () => {}, onBlock 
                 <div className="flex items-center justify-between gap-3">
                   <div className="truncate">
                     <div className="text-sm font-medium truncate">{getDisplayName(d)}</div>
-                    <div className="text-xs text-gray-500 font-mono">{d.ip}</div>
+                    <div className="text-xs text-gray-500 font-mono hidden sm:block">{d.ip}</div>
                   </div>
                   <div className="text-right min-w-[90px]">
                     <div className={`text-xs font-semibold ${isBlocked ? 'text-red-300' : d.online ? 'text-green-300' : 'text-gray-400'}`}>{isBlocked ? 'Quarantined' : d.online ? 'Online' : 'Offline'}</div>
@@ -38,10 +38,10 @@ export default function TopDevices({ devices = [], onVerify = () => {}, onBlock 
               </div>
 
               <div className="flex flex-col gap-2 ml-2">
-                <button onClick={() => onVerify(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-green-900/40 text-green-300 text-sm hover:bg-green-900/60 disabled:opacity-40">
+                <button onClick={() => onVerify(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-green-900/40 text-green-300 text-sm hover:bg-green-900/60 disabled:opacity-40" aria-label={`Verify ${getDisplayName(d)}`}>
                   <CheckCircle size={14} />
                 </button>
-                <button onClick={() => onBlock(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-red-900/40 text-red-300 text-sm hover:bg-red-900/60 disabled:opacity-40">
+                <button onClick={() => onBlock(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-red-900/40 text-red-300 text-sm hover:bg-red-900/60 disabled:opacity-40" aria-label={`Block ${getDisplayName(d)}`}>
                   <ShieldAlert size={14} />
                 </button>
               </div>

@@ -1,6 +1,6 @@
 # Frontend
 
-React dashboard for the ZeroTrust IoT console.
+React dashboard for the ZeroTrust IoT Gateway.
 
 ## Development
 

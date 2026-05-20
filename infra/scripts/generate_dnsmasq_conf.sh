@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOTDIR="$(cd "$(dirname "$0")/.." && pwd)"
 POLICIES=${1:-"${ROOTDIR}/backend/policies.json"}
-OUTDIR=${2:-"${ROOTDIR}/deploy/dnsmasq"}
+OUTDIR=${2:-"${ROOTDIR}/infra/deploy/dnsmasq"}
 
 mkdir -p "$OUTDIR"
 echo "Using policies: $POLICIES -> output: $OUTDIR"
