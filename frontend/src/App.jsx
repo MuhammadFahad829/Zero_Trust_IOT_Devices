@@ -403,16 +403,7 @@ const App = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-400 mr-2">Dev hotspot</label>
-                <button
-                  type="button"
-                  onClick={() => setDevMode((v) => !v)}
-                  className={`px-3 py-1 rounded-lg border ${devMode ? 'bg-green-600 border-green-500' : 'bg-gray-800 border-gray-700'}`}
-                >
-                  {devMode ? 'ON' : 'OFF'}
-                </button>
-              </div>
+              {/* Dev hotspot toggle removed from UI */}
             </div>
           </motion.div>
         </header>
