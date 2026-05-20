@@ -57,6 +57,7 @@ This document describes the recommended folder and file layout for the project a
   - LICENSE
 
 Notes and recommendations
+
 - Do NOT commit runtime artifacts to git: add `node_modules/`, `frontend/build/`, and `.venv/` to `.gitignore`.
 - `backend/policies.json` is the single source of truth for segments/VLANs; scripts read it for provisioning.
 - Keep `scripts/` small and well documented; prefer dry-run behavior by default and `--apply` for live changes.
@@ -69,8 +70,17 @@ sudo setcap cap_net_raw,cap_net_admin+eip "/path/to/project/.venv/bin/python"
 - Use `docs/ONBOARDING.md` to record segmentation macros, common provisioning commands, and safe rollback steps.
 
 Maintenance tips
+
 - Rebuild frontend when editing UI: `cd frontend && npm run build`.
 - Run tests: `PYTHONPATH=./backend .venv/bin/python -m pytest -q`.
 - To revert moved artifacts: `mv trash/removed_YYYYMMDD/node_modules frontend/node_modules` (reverse for `build`).
+
+Repository housekeeping performed:
+
+- Removed duplicate docs component `docs/Sidebar.jsx` (moved to `frontend/src/components/Sidebar.jsx`).
+- Removed accidental root `package-lock.json` (frontend retains its own `frontend/package-lock.json`).
+- Removed placeholder `backend/.dummy` file to keep `backend/` reserved for real modules.
+
+These changes only affect repository layout and not runtime behavior.
 
 If you want, I can also create a `.gitignore` or `docs/ONBOARDING.md` next.

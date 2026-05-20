@@ -123,10 +123,10 @@ export default function AdminPanel({ hotspotActive = true }) {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-6xl mx-auto"
     >
-      <div className="mb-8 card-soft border border-blue-500/20 bg-blue-950/10 p-5">
+      <div className="mb-8 card-soft border border-blue-500/20 bg-blue-950/10 p-5 md:p-6 rounded-2xl shadow-[0_18px_50px_rgba(15,23,42,0.22)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-accent-blue/20 rounded-lg text-accent-blue">
+            <div className="p-2 bg-accent-blue/20 rounded-xl text-accent-blue border border-blue-500/15">
               <Settings size={28} />
             </div>
             <div>
@@ -148,7 +148,7 @@ export default function AdminPanel({ hotspotActive = true }) {
         {/* Segments Card */}
         <motion.div
           whileHover={{ y: -2 }}
-          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-5 md:p-6 shadow transition"
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -161,7 +161,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             <span className="px-3 py-1 rounded-full text-[11px] border border-blue-500/20 text-blue-300 bg-blue-950/20">Network</span>
           </div>
 
-          <div className="bg-gray-800/40 border border-gray-700/40 rounded-lg p-4 mb-4">
+          <div className="bg-gray-800/40 border border-gray-700/40 rounded-2xl p-4 mb-4">
             <p className="text-sm text-gray-300 leading-relaxed">
               Segments are defined in <code className="text-accent-blue text-xs">backend/policies.json</code>. You can view assigned segments and force re-apply iptables rules.
             </p>
@@ -200,7 +200,7 @@ export default function AdminPanel({ hotspotActive = true }) {
                     return (seg.name || '').toLowerCase().includes(q) || ((seg.cidr||'').toLowerCase().includes(q));
                   })
                   .map((seg) => (
-                    <label key={seg.name} className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-700 bg-gray-900/30 text-xs text-gray-200 cursor-pointer">
+                    <label key={seg.name} className="inline-flex items-center gap-2 px-2 py-1.5 rounded-full border border-gray-700 bg-gray-900/30 text-xs text-gray-200 cursor-pointer">
                       <input type="checkbox" checked={selectedSegments.has(seg.name)} onChange={(e) => {
                         const next = new Set(selectedSegments);
                         if (e.target.checked) next.add(seg.name); else next.delete(seg.name);
@@ -235,7 +235,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <button
               onClick={async () => {
                 setApplyingSegments(true);
@@ -308,7 +308,7 @@ export default function AdminPanel({ hotspotActive = true }) {
         {/* Provisioning Card */}
         <motion.div
           whileHover={{ y: -2 }}
-          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-5 md:p-6 shadow transition"
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -321,7 +321,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             <span className="px-3 py-1 rounded-full text-[11px] border border-blue-500/20 text-blue-300 bg-blue-950/20">Primary action</span>
           </div>
 
-          <div className="bg-gray-800/40 border border-gray-700/40 rounded-lg p-4 mb-4">
+          <div className="bg-gray-800/40 border border-gray-700/40 rounded-2xl p-4 mb-4">
             <p className="text-sm text-gray-300 leading-relaxed">
               Automatically create VLAN interfaces (eth0.100, eth0.200, etc.), network bridges, and configure dnsmasq DHCP servers for each segment. System will prompt for sudo password.
             </p>
@@ -363,7 +363,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             </div>
           )}
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[11px] text-gray-500">A confirmation dialog will appear before any system changes.</p>
               <div className="flex items-center gap-2">
                 <button
@@ -475,7 +475,7 @@ export default function AdminPanel({ hotspotActive = true }) {
         {/* Security Token Card */}
         <motion.div
           whileHover={{ y: -2 }}
-          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-6 shadow transition"
+          className="rounded-2xl border border-gray-800/60 bg-gray-900/20 p-5 md:p-6 shadow transition"
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -494,7 +494,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             </span>
           </div>
 
-          <div className="bg-gray-800/40 border border-gray-700/40 rounded-lg p-4 mb-4">
+          <div className="bg-gray-800/40 border border-gray-700/40 rounded-2xl p-4 mb-4">
             <p className="text-sm text-gray-300 leading-relaxed">
               Set a security token to authorize provisioning requests. This token will be validated against the backend <code className="text-accent-blue text-xs">PROVISION_TOKEN</code> environment variable.
             </p>
@@ -526,7 +526,7 @@ export default function AdminPanel({ hotspotActive = true }) {
             </div>
           </div>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[11px] text-gray-500">Keep this token in sync with the backend environment variable.</p>
             <button
               onClick={() => {
@@ -547,7 +547,7 @@ export default function AdminPanel({ hotspotActive = true }) {
       {tokenOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setTokenOpen(false)} />
-          <div className="bg-gray-900 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
+          <div className="bg-gray-900 rounded-2xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
             <h3 className="text-xl font-bold text-gray-100 mb-1">Security Token Settings</h3>
             <p className="text-xs text-gray-500 mb-4">Configure authentication token for provisioning</p>
 
@@ -589,7 +589,7 @@ export default function AdminPanel({ hotspotActive = true }) {
       {provOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => (provLoading ? null : setProvOpen(false))} />
-          <div className="bg-gray-900 rounded-xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
+          <div className="bg-gray-900 rounded-2xl p-6 z-60 w-11/12 max-w-sm border border-gray-800/60 shadow-lg">
             <h3 className="text-lg font-bold text-gray-100 mb-2">Confirm Provisioning</h3>
             <p className="text-sm text-gray-400 mb-4">Review your settings before starting provisioning</p>
 

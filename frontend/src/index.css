@@ -108,3 +108,35 @@ body {
 /* Shared card utility */
 .card-soft { border-radius: 1rem; padding: 1rem; background: linear-gradient(180deg, rgba(17,20,27,0.6), rgba(10,12,16,0.45)); border: 1px solid rgba(255,255,255,0.02); box-shadow: 0 8px 30px rgba(2,6,23,0.6); }
 
+/* Professional table responsive wrapper */
+.professional-table-container { overflow-x: auto; }
+
+@media (max-width: 768px) {
+	/* Reduce paddings and font sizes on small screens */
+	.px-6 { padding-left: 1rem; padding-right: 1rem; }
+	.py-3 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+	.text-4xl { font-size: 1.5rem; }
+	.text-3xl { font-size: 1.25rem; }
+	.card-soft { padding: 0.9rem; }
+	.btn { padding: 0.55rem 0.8rem; border-radius: 0.75rem; }
+}
+
+@media (max-width: 640px) {
+	main { padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+	.card-soft { border-radius: 0.9rem; }
+	.professional-table-container { margin-left: -0.15rem; margin-right: -0.15rem; }
+	/* Keep tables and wide controls usable on narrow screens */
+	table { font-size: 0.78rem; }
+	.btn { width: auto; }
+}
+
+/* Additional polish for consistent layout and spacing */
+main.main-content { max-width: 1200px; margin: 0 auto; }
+
+.card-soft--polished { padding: 1.05rem; box-shadow: 0 12px 36px rgba(2,6,23,0.5); border: 1px solid rgba(255,255,255,0.03); }
+.btn { border-radius: 0.6rem; }
+
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+button, .btn { touch-action: manipulation; }
+

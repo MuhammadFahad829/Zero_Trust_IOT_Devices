@@ -154,26 +154,26 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-5 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)]">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-5 md:p-6 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)] rounded-2xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-3">
-            <Wifi className="text-blue-400" size={20} />
+            <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/20 text-blue-300">
+              <Wifi size={20} />
+            </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.3em] text-blue-300/70 mb-1">Network view</p>
-              <h3 className="text-lg font-semibold text-blue-300">Network Topology</h3>
-              <p className="text-sm text-gray-400">Hover devices for details and quick actions</p>
+              <h3 className="text-2xl font-bold text-blue-200">Network Topology</h3>
+              <p className="text-sm text-gray-400">Hover devices for details and quick actions.</p>
             </div>
           </div>
-          <div className="flex flex-col items-start md:items-end gap-2">
-            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-medium ${modeTone}`}>
+          <div className="flex flex-wrap gap-2 text-[11px] text-gray-300">
+            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border font-medium ${modeTone}`}>
               <Radio size={12} />
               {modeLabel}
             </span>
-            <div className="flex flex-wrap gap-2 text-[11px] text-gray-300 justify-start md:justify-end">
-            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Allowed: {allowedCount}</span>
-            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Quarantined: {quarantinedCount}</span>
-            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/40">Devices: {devices.length}</span>
-            </div>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Allowed: {allowedCount}</span>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Quarantined: {quarantinedCount}</span>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Devices: {devices.length}</span>
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
@@ -260,7 +260,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative min-h-[420px] card-soft p-4 sm:p-6 overflow-hidden border border-gray-800/60">
+      <div ref={containerRef} className="relative min-h-[420px] card-soft p-4 sm:p-6 overflow-hidden border border-gray-800/60 rounded-2xl">
         <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
           <motion.div
             animate={{ boxShadow: ['0_0_0_0_rgba(59,130,246,0.35)', '0_0_0_18px_rgba(59,130,246,0)'] }}
@@ -400,6 +400,8 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
           <div className="text-red-400"><ShieldAlert /></div>
         </div>
       </div>
+
+      <div className="text-xs text-gray-500 text-center pb-1">Tip: search narrows the map, and each node carries quick allow/quarantine actions.</div>
     </motion.div>
   );
 }

@@ -9,6 +9,7 @@ const extraItems = [
   { name: 'Threat Vault', icon: Bot, tab: 'threats', section: 'Overview' },
   { name: 'Network Map', icon: Network, tab: 'topology', section: 'Network' },
   { name: 'Audit Logs', icon: History, tab: 'logs', section: 'Network' },
+  { name: 'Segmentation', icon: Layers, tab: 'segmentation', section: 'Control' },
   { name: 'Administration', icon: Settings, tab: 'admin', section: 'Control' },
 ];
 
@@ -29,38 +30,38 @@ const Sidebar = ({
   return (
     <div
       className={[
-        'w-64 bg-card h-full flex flex-col border-r border-gray-800/50 p-6',
+        'w-64 bg-card h-full flex flex-col border-r border-gray-800/50 p-5 sm:p-6 overflow-y-auto',
         'fixed md:static top-0 left-0 z-40 transition-transform duration-300',
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       ].join(' ')}
       role="navigation"
       aria-label="Main sidebar navigation"
     >
-      <div className="flex items-center gap-3 mb-10">
-        <div className="p-2 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
+      <div className="flex items-center gap-3 sm:gap-4 mb-8 sm:mb-10">
+        <div className="shrink-0 p-2.5 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
           <ShieldCheck size={28} />
         </div>
-        <div>
-          <h2 className="text-xl font-bold tracking-tight">Sentinel.ai</h2>
-          <span className="text-xs text-gray-500">Autonomous Security</span>
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight leading-tight max-w-[11rem] sm:max-w-none">ZeroTrust IoT Gateway</h2>
+          <span className="block text-[11px] sm:text-xs text-gray-500 tracking-wide mt-1">Network Control Center</span>
         </div>
       </div>
 
-      <div className="mb-6 rounded-2xl border border-gray-800/60 bg-gray-950/40 p-4">
-        <p className="text-[11px] uppercase tracking-[0.3em] text-gray-500">Live overview</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
+      <div className="mb-5 rounded-2xl border border-gray-800/60 bg-gray-950/40 p-4 sm:p-4.5">
+        <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.32em] text-gray-500">Live overview</p>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 text-sm">
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2.5">
             <div className="text-gray-500 text-[11px]">Devices</div>
             <div className="font-semibold text-gray-100">{deviceCount}</div>
           </div>
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2.5">
             <div className="text-gray-500 text-[11px]">Threats</div>
             <div className="font-semibold text-red-300">{threatCount}</div>
           </div>
         </div>
       </div>
 
-      <nav className="space-y-5">
+      <nav className="space-y-4 sm:space-y-5">
         <div>
           <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
             <Layers size={12} />
@@ -78,7 +79,7 @@ const Sidebar = ({
                     if (onCloseMobile) onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
                     isActive
                       ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
                       : 'text-gray-300 border-transparent hover:text-white hover:bg-gray-900/30 hover:border-gray-800/60'
@@ -113,7 +114,7 @@ const Sidebar = ({
                   title={disabled ? 'Connect hotspot to enable' : undefined}
                   aria-current={isActive ? 'page' : undefined}
                   aria-disabled={disabled ? 'true' : undefined}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-colors relative border ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors relative border ${
                     isActive
                       ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/20'
                       : disabled
@@ -134,12 +135,12 @@ const Sidebar = ({
       </nav>
 
       {deviceSegmentFilters && deviceSegmentFilters.length > 0 && (
-        <div className="mt-6">
+        <div className="mt-5">
           <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-gray-500">
             <Layers size={12} />
             <span>Segments</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {deviceSegmentFilters.slice(0, 10).map((f) => (
               <button
                 key={f.key}
@@ -153,8 +154,8 @@ const Sidebar = ({
         </div>
       )}
 
-      <div className="mt-auto pt-6 border-t border-gray-800/40">
-        <p className="text-xs text-gray-500 text-center">Zero-Trust IoT Gateway</p>
+      <div className="mt-auto pt-5 sm:pt-6 border-t border-gray-800/40">
+        <p className="text-xs text-gray-500 text-center">ZeroTrust IoT Gateway</p>
         <p className="text-xs text-gray-600 text-center mt-1">v1.0</p>
       </div>
     </div>

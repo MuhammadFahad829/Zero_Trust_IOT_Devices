@@ -336,6 +336,9 @@ class EnforcementEngine:
     def allow_device(self, ip: str, segment: Optional[str] = None) -> bool:
         """Insert an ACCEPT rule for a verified IP on the appropriate segment interface."""
         iface = self._iface_for_segment(segment)
+        candidate_ifaces = [iface]
+        if self.lan and self.lan not in candidate_ifaces:
+            candidate_ifaces.append(self.lan)
         # remove any quarantine jump for this IP first (both IPv4 and IPv6)
         try:
             self._exec_list(["sudo", "iptables", "-D", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=True, capture_output=True)
@@ -348,37 +351,47 @@ class EnforcementEngine:
             except Exception:
                 pass
 
-        check_cmd = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(iface)} -j ACCEPT"
-        # If rule already exists, nothing to do
-        if self._check_cmd(check_cmd):
-            print(f"[SUCCESS] Access already granted to {ip} on {iface}")
-            return True
+        granted_any = False
+        all_ok = True
+        for candidate in candidate_ifaces:
+            check_cmd = f"sudo iptables -C FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
+            if self._check_cmd(check_cmd):
+                print(f"[SUCCESS] Access already granted to {ip} on {candidate}")
+                granted_any = True
+                continue
 
-        add_cmd = f"sudo iptables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(iface)} -j ACCEPT"
-        if self._run_cmd(add_cmd):
-            print(f"[SUCCESS] Access granted to {ip} on {iface}")
-            return True
-        return False
+            add_cmd = f"sudo iptables -I FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
+            if self._run_cmd(add_cmd):
+                print(f"[SUCCESS] Access granted to {ip} on {candidate}")
+                granted_any = True
+            else:
+                all_ok = False
+
+        return granted_any and all_ok
 
     def block_device(self, ip: str, segment: Optional[str] = None) -> bool:
         """Remove a previously-inserted ACCEPT rule, returning device to default DROP policy."""
         iface = self._iface_for_segment(segment)
-        del_cmd = f"sudo iptables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(iface)} -j ACCEPT"
+        candidate_ifaces = [iface]
+        if self.lan and self.lan not in candidate_ifaces:
+            candidate_ifaces.append(self.lan)
         removed_any = False
         # Attempt to delete matching rules repeatedly until none remain.
         # Use _run_cmd which respects dry-run. In dry-run we avoid infinite loops by breaking after one attempt.
-        while True:
-            ok = self._run_cmd(del_cmd)
-            if ok:
-                removed_any = True
-                if self.dry_run:
-                    break
-                # continue trying to remove duplicates
-                continue
-            break
+        for candidate in candidate_ifaces:
+            del_cmd = f"sudo iptables -D FORWARD -s {shlex.quote(ip)} -i {shlex.quote(candidate)} -j ACCEPT"
+            while True:
+                ok = self._run_cmd(del_cmd)
+                if ok:
+                    removed_any = True
+                    if self.dry_run:
+                        break
+                    # continue trying to remove duplicates
+                    continue
+                break
 
         if removed_any:
-            print(f"[QUARANTINE] Access revoked for {ip} on {iface}")
+            print(f"[QUARANTINE] Access revoked for {ip} on {candidate_ifaces}")
             # ensure a quarantine rule exists so the IP is actively dropped
             try:
                 # insert at top of ZT_SEGMENTS so quarantine is evaluated early
@@ -393,7 +406,7 @@ class EnforcementEngine:
             self._exec_list(["sudo", "iptables", "-I", "ZT_SEGMENTS", "-s", ip, "-j", "ZT_QUARANTINE"], check=False, capture_output=True)
         except Exception:
             pass
-        print(f"[QUARANTINE] {ip} already blocked on {iface}")
+        print(f"[QUARANTINE] {ip} already blocked on {candidate_ifaces}")
         return True
 
     def apply_raw_rule(self, rule_cmd: str) -> bool:

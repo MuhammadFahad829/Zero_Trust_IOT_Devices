@@ -131,68 +131,66 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
   const autoAssignSegment = suggestedSegments[0] || 'other';
 
   return (
-    <div className={`border transition-all duration-200 overflow-hidden relative bg-card/70 ${compact ? 'p-4 rounded-xl' : 'p-6 rounded-2xl'} ${
-      isBlocked ? 'border-red-500/40' : 'border-green-500/20'
-    } ${device.alert ? 'pulse-red' : ''}`}>
+    <div
+      className={[
+        'border transition-all duration-200 overflow-hidden relative bg-card/70',
+        compact ? 'p-3 rounded-xl flex flex-col justify-between h-full min-w-[220px] max-w-[320px] flex-shrink-0' : 'p-6 rounded-2xl',
+        isBlocked ? 'border-red-500/40' : 'border-green-500/20',
+        device.alert ? 'pulse-red' : '',
+      ].join(' ')}
+    >
       {isBlocked && <div className="absolute inset-0 border-2 border-red-500/20 rounded-2xl pointer-events-none" />}
 
-      <div className={`flex justify-between items-start ${compact ? 'mb-3' : 'mb-4'}`}>
+      <div className={`flex justify-between items-start ${compact ? 'mb-2' : 'mb-4'}`}>
         <div className={`${compact ? 'p-2.5 rounded-xl' : 'p-3 rounded-lg'} ${
           isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
         }`} style={!isBlocked ? { backgroundColor: categoryMeta.bg, color: categoryMeta.color } : undefined}>
           {getCategoryIcon(category)}
         </div>
         <div className="flex items-center gap-3">
-          <span className={`inline-flex items-center gap-2 ${compact ? 'text-[10px]' : 'text-xs'} font-semibold`}>
+          <div className={`inline-flex items-center gap-2 ${compact ? 'text-[11px]' : 'text-xs'} font-semibold`}>
             <span
               aria-hidden="true"
-              className={`h-2.5 w-2.5 rounded-full ${isBlocked ? 'bg-red-500' : (online ? 'bg-green-400' : 'bg-gray-400')}`}
+              className={`h-3 w-3 rounded-full ${isBlocked ? 'bg-red-500' : (online ? 'bg-green-400' : 'bg-gray-400')}`}
               title={device.status}
             />
             <span className={`${isBlocked ? 'text-red-300' : (online ? 'text-green-200' : 'text-gray-300')}`} aria-live="polite" role="status">
               {isBlocked ? 'Quarantined' : (online ? 'Online' : (device.status || 'Offline'))}
             </span>
-          </span>
+          </div>
 
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setCollapsed((s) => !s)} aria-label={collapsed ? 'Expand card' : 'Collapse card'} className="p-1 rounded hover:bg-white/5">
+            <button type="button" onClick={() => setCollapsed((s) => !s)} aria-label={collapsed ? 'Expand card' : 'Collapse card'} className="p-2 rounded hover:bg-white/5" title="Toggle details">
               {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-            </button>
-            <button type="button" onClick={handleVerify} aria-label={isBlocked ? 'Release device' : 'Allow device'} className="p-1 rounded hover:bg-white/5" disabled={!online} aria-disabled={!online}>
-              <CheckCircle size={14} className="text-green-300" />
-            </button>
-            <button type="button" onClick={handleBlock} aria-label="Block device" className="p-1 rounded hover:bg-white/5" disabled={!online} aria-disabled={!online}>
-              <ShieldAlert size={14} className="text-red-400" />
             </button>
           </div>
         </div>
       </div>
 
-      <div>
-        <div className="flex items-center gap-3">
-          <div
-            className={`${compact ? 'w-9 h-9' : 'w-10 h-10'} rounded-full text-white font-bold text-xs flex items-center justify-center border border-white/10 shadow-md`}
-            style={{ backgroundColor: vendor.color, boxShadow: `0 0 0 1px ${categoryMeta.border}` }}
-            title={vendor.name}
-          >
-            {vendor.token}
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <div
+              className={`${compact ? 'w-9 h-9' : 'w-10 h-10'} rounded-full text-white font-bold text-xs flex items-center justify-center border border-white/10 shadow-md flex-shrink-0`}
+              style={{ backgroundColor: vendor.color, boxShadow: `0 0 0 1px ${categoryMeta.border}` }}
+              title={vendor.name}
+            >
+              {vendor.token}
+            </div>
+            <div className="min-w-0">
+              <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold leading-tight truncate`} title={displayName}>{displayName}</h3>
+              <p className="text-xs text-gray-400 truncate">{vendor.name} • {category}</p>
+            </div>
           </div>
-          <div>
-            <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold leading-tight max-w-[220px] truncate`} title={displayName}>{displayName}</h3>
-            <p className="text-xs text-gray-400">{vendor.name} • {category}</p>
+
+          <div className={`mt-2 flex flex-wrap gap-2 items-center ${compact ? 'text-[11px]' : 'text-[11px]'}`}>
+            <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-300 font-mono">{device.ip}</span>
+            <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-400 font-mono">{device.mac}</span>
+            <span className={`px-2 py-1 rounded-full border ${isBlocked ? 'border-red-500/30 text-red-300 bg-red-950/10' : (online ? 'border-green-500/30 text-green-300 bg-green-950/10' : 'border-gray-700 text-gray-400 bg-gray-900/40')}`} aria-live="polite" role="status">
+              {isBlocked ? 'Quarantined' : (online ? 'Online' : 'Offline')}
+            </span>
+            <span className="px-2 py-1 rounded-full border border-gray-700 bg-gray-900/35 text-gray-300">{device.segment || 'Unassigned'}</span>
           </div>
         </div>
-        <div className={`mt-2 flex flex-wrap gap-2 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
-          <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-300 font-mono">{device.ip}</span>
-          <span className="px-2 py-1 rounded-full border border-gray-700/80 bg-gray-900/40 text-gray-400 font-mono">{device.mac}</span>
-          <span className={`px-2 py-1 rounded-full border ${isBlocked ? 'border-red-500/30 text-red-300 bg-red-950/10' : (online ? 'border-green-500/30 text-green-300 bg-green-950/10' : 'border-gray-700 text-gray-400 bg-gray-900/40')}`} aria-live="polite" role="status">
-            {isBlocked ? 'Quarantined' : (online ? 'Online' : 'Offline')} {/* Display online/offline status */}
-          </span>
-          <span className="px-2 py-1 rounded-full border border-blue-500/20 text-blue-300 bg-blue-950/20">
-            {getDisplayName(device)}
-          </span>
-        </div>
-      </div>
 
       <div className={`grid grid-cols-2 gap-2 text-xs ${compact ? 'mb-2 mt-3' : 'mb-3 mt-0'}`}>
         <div className="bg-gray-900/35 border border-gray-700 rounded-lg p-2">
@@ -336,10 +334,10 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </div>
         </div>
       ) : (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           <button
             onClick={handleVerify}
-            className="flex-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2"
+            className="col-span-1 btn btn-success text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
             disabled={!online}
             aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to verify' : undefined}
@@ -349,13 +347,22 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </button>
           <button
             onClick={handleBlock}
-            className="flex-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2"
+            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
             disabled={!online}
             aria-disabled={!online}
             title={!online ? 'Device offline — connect hotspot to block' : undefined}
           >
             <ShieldAlert size={14} />
             Block
+          </button>
+          <button
+            onClick={() => setOpenDetails((s) => !s)}
+            className="col-span-1 btn btn-ghost text-xs font-medium flex items-center justify-center gap-2 py-2 px-3 rounded-lg"
+            aria-pressed={openDetails}
+            aria-label="Toggle details"
+          >
+            {openDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            Details
           </button>
         </div>
       )}

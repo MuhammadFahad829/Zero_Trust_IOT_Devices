@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
-import { getDisplayName, getVendorMeta, inferCategory } from '../utils/deviceIdentity';
+import { getDisplayName, getVendorMeta, inferCategory, getCategoryMeta } from '../utils/deviceIdentity';
 import { formatBytes } from '../utils/format';
 
 export default function ThreatVault({ devices }) {
@@ -35,46 +35,55 @@ export default function ThreatVault({ devices }) {
       animate={{ opacity: 1 }}
       className="space-y-6"
     >
-      <div className="card-soft border border-red-500/30 bg-red-950/20 p-6 mb-2">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="text-red-500" size={24} />
-          <div>
-            <h3 className="text-lg font-semibold text-red-400">Threat Vault</h3>
-            <p className="text-sm text-gray-400">
-              {quarantinedDevices.length} device{quarantinedDevices.length !== 1 ? 's' : ''} in quarantine
-            </p>
+      <div className="card-soft border border-red-500/25 bg-red-950/15 p-5 md:p-6 shadow-[0_18px_50px_rgba(127,29,29,0.16)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-red-500/15 border border-red-500/20 text-red-300">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-red-300/70 mb-1">Security view</p>
+              <h3 className="text-2xl font-bold text-red-200">Threat Vault</h3>
+              <p className="text-sm text-gray-400">Quarantined devices, held traffic, and enforcement actions in one place.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] text-gray-300">
+            <span className="px-3 py-1 rounded-full border border-red-500/20 bg-red-950/25">{quarantinedDevices.length} quarantined</span>
+            <span className="px-3 py-1 rounded-full border border-red-500/20 bg-red-950/25">{formatBytes(totalBytes)} held</span>
+            <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Policy enforced</span>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
-            <div className="text-[11px] uppercase tracking-widest text-gray-500">Quarantined</div>
-            <div className="mt-1 text-lg font-semibold text-red-300">{quarantinedDevices.length}</div>
+
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="rounded-2xl border border-red-500/20 bg-red-950/15 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Quarantined</div>
+            <div className="mt-1 text-2xl font-bold text-red-200">{quarantinedDevices.length}</div>
           </div>
-          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
-            <div className="text-[11px] uppercase tracking-widest text-gray-500">Traffic held</div>
-            <div className="mt-1 text-lg font-semibold text-red-300 font-mono">{formatBytes(totalBytes)}</div>
+          <div className="rounded-2xl border border-red-500/20 bg-red-950/15 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Traffic held</div>
+            <div className="mt-1 text-2xl font-bold text-red-200 font-mono">{formatBytes(totalBytes)}</div>
           </div>
-          <div className="card-soft px-4 py-3 border border-red-500/20 bg-red-950/20">
-            <div className="text-[11px] uppercase tracking-widest text-gray-500">Policy state</div>
-            <div className="mt-1 text-lg font-semibold text-red-300">Enforced</div>
+          <div className="rounded-2xl border border-red-500/20 bg-red-950/15 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Policy state</div>
+            <div className="mt-1 text-2xl font-bold text-red-200">Enforced</div>
           </div>
         </div>
       </div>
 
       {quarantinedDevices.length === 0 ? (
-        <div className="card-soft text-center py-12 text-gray-400 border border-green-700/30 bg-green-950/10">
+        <div className="card-soft text-center py-12 text-gray-400 border border-green-700/30 bg-green-950/10 rounded-2xl">
           <p className="font-medium text-green-300">No active threats detected</p>
           <p className="text-sm mt-1">All monitored devices are currently operating within policy.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {quarantinedDevices.map((device, idx) => (
             <motion.div
               key={device.ip}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.1 }}
-              className={`card-soft border border-red-500/40 bg-red-950/10 p-6 shadow-[0_0_20px_rgba(239,68,68,0.1)] crimson-glow pulse-red`}
+              className="card-soft border border-red-500/35 bg-red-950/10 p-5 rounded-2xl shadow-[0_0_20px_rgba(239,68,68,0.1)] crimson-glow pulse-red"
             >
               <div className="flex justify-between items-start gap-4 mb-4">
                 <div>
@@ -103,14 +112,14 @@ export default function ThreatVault({ devices }) {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleRelease(device.ip)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-700 rounded-xl text-sm font-medium transition"
                 >
                   <RotateCcw size={16} />
                   Release
                 </button>
                 <button
                   onClick={() => handleIsolate(device.ip)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 bg-gray-800 hover:bg-red-900 rounded-lg text-sm font-medium transition"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-800 hover:bg-red-900 rounded-xl text-sm font-medium transition"
                 >
                   <Trash2 size={16} />
                   Force Keep Isolated

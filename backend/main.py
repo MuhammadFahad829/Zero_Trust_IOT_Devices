@@ -22,13 +22,28 @@ import database
 import time
 from typing import Optional
 
-app = FastAPI(title="Zero-Trust IoT Gateway")
+app = FastAPI(title="ZeroTrust IoT Gateway")
 
 LAN_INTERFACE = os.environ.get("LAN_INTERFACE", "wlp2s0")
 
 
 def _detect_default_wan_interface() -> str:
     """Detect the current default internet-facing interface from the system routing table."""
+    try:
+        result = subprocess.run(
+            ["ip", "route", "get", "1.1.1.1"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        parts = result.stdout.split()
+        if "dev" in parts:
+            dev_idx = parts.index("dev") + 1
+            if dev_idx < len(parts):
+                return parts[dev_idx]
+    except Exception:
+        pass
+
     try:
         result = subprocess.run(
             ["ip", "route", "show", "default"],
@@ -44,7 +59,36 @@ def _detect_default_wan_interface() -> str:
                     return parts[dev_idx]
     except Exception:
         pass
-    return "enxc688a1bd0aa9"
+
+    try:
+        result = subprocess.run(
+            ["ip", "-o", "route", "show", "table", "main", "default"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if "dev" in parts:
+                dev_idx = parts.index("dev") + 1
+                if dev_idx < len(parts):
+                    return parts[dev_idx]
+    except Exception:
+        pass
+
+    # As a last resort, prefer a live non-loopback interface with an IPv4 address.
+    try:
+        result = subprocess.run(["ip", "-4", "-o", "addr", "show"], check=True, capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 4:
+                iface = parts[1]
+                if iface != "lo" and not iface.startswith("wlp2s0."):
+                    return iface
+    except Exception:
+        pass
+
+    return "wlp2s0"
 
 
 def _detect_hotspot_interface() -> str:
@@ -172,6 +216,16 @@ def _is_device_online(last_seen: float) -> bool:
         return False
 
     return (time.time() - last_seen_value) <= 45
+
+
+def _device_segment_for_ip(ip: str) -> str:
+    try:
+        row = next((d for d in database.list_devices() if d.get("ip") == ip), None)
+        if row:
+            return (row.get("segment") or "").strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_type: str = None, online: bool = True):
@@ -1049,7 +1103,8 @@ def read_root():
 @app.post("/allow/{ip}")
 async def allow_access(ip: str):
     """Grant access to a verified device."""
-    ok = enforcer.allow_device(ip)
+    segment = _device_segment_for_ip(ip)
+    ok = enforcer.allow_device(ip, segment=segment or None)
     status = "Allowed" if ok else "Error"
     await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
     try:
@@ -1063,7 +1118,7 @@ async def allow_access(ip: str):
             device_type=existing["device_type"] if existing else None,
             status=status,
             mb_limit=existing.get("mb_limit", 100.0) if existing else 100.0,
-            segment=existing.get("segment", "") if existing else "",
+            segment=segment or (existing.get("segment", "") if existing else ""),
         )
     except Exception:
         pass
@@ -1073,7 +1128,8 @@ async def allow_access(ip: str):
 @app.post("/block/{ip}")
 async def block_access(ip: str):
     """Quarantine a device (revoke prior allow)."""
-    ok = enforcer.block_device(ip)
+    segment = _device_segment_for_ip(ip)
+    ok = enforcer.block_device(ip, segment=segment or None)
     status = "Quarantined" if ok else "Error"
     await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
     try:
@@ -1088,7 +1144,7 @@ async def block_access(ip: str):
                 device_type=existing["device_type"],
                 status=status,
                 mb_limit=existing.get("mb_limit", 100.0),
-                segment=existing.get("segment", ""),
+                segment=segment or existing.get("segment", ""),
             )
     except Exception:
         pass

@@ -53,10 +53,10 @@ class TrafficMonitor:
         span = max(now - window[0][0], 0.5)
         return (total / span) / (1024 * 1024)
 
-    def _append_device_sample(self, ip_src: str, now: float):
-        # throttle history sampling to at most once per second per device
+    def _append_device_sample(self, ip_src: str, now: float, force: bool = False):
+        # throttle history sampling to at most once per second per device when not forced
         last = self._last_sample_time.get(ip_src, 0)
-        if now - last < 1.0:
+        if not force and (now - last) < 1.0:
             return
         self._last_sample_time[ip_src] = now
         history = self.device_history.setdefault(ip_src, deque(maxlen=60))
@@ -168,7 +168,8 @@ class TrafficMonitor:
             self._trim_device_window(ip_src, timestamp)
 
             self.device_total_bytes[ip_src] = self.device_total_bytes.get(ip_src, 0) + bytes_count
-            self._append_device_sample(ip_src, timestamp)
+            # when injecting synthetic samples, bypass throttle so tests and replays record each sample
+            self._append_device_sample(ip_src, timestamp, force=True)
         try:
             telemetry.inc_packet_processed()
         except Exception:
