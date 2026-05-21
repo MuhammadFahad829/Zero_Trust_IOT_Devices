@@ -102,26 +102,23 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
 
       {/* Stats Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-        <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-3">
+        <div className="card-soft p-2 rounded-xl">
           <div className="text-xs text-gray-400 font-semibold">Total Devices</div>
           <div className="text-2xl font-bold text-white mt-1">{devices.length}</div>
         </div>
-
-        <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-3">
+        <div className="card-soft p-2 rounded-xl">
           <div className="text-xs text-gray-400 font-semibold">Total Limit</div>
           <div className="text-2xl font-bold text-blue-400 mt-1">
             {(devices.reduce((sum, d) => sum + (d.mb_limit || 100), 0)).toFixed(0)} MB
           </div>
         </div>
-
-        <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-3">
+        <div className="card-soft p-2 rounded-xl">
           <div className="text-xs text-gray-400 font-semibold">Total Usage</div>
           <div className="text-2xl font-bold text-green-400 mt-1">
             {(devices.reduce((sum, d) => sum + (d.trafficMB || 0), 0)).toFixed(1)} MB
           </div>
         </div>
-
-        <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-3">
+        <div className="card-soft p-2 rounded-xl">
           <div className="text-xs text-gray-400 font-semibold">Avg Usage</div>
           <div className="text-2xl font-bold text-amber-400 mt-1">
             {devices.length > 0
@@ -137,7 +134,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
       </div>
 
       {/* Per-segment aggregate chart */}
-      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-3">
+      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-2">
         <h4 className="text-sm font-semibold text-white mb-3">Segment Totals</h4>
         <div style={{ width: '100%', height: 220 }}>
           <ResponsiveContainer width="100%" height={220}>
@@ -155,7 +152,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
       </div>
 
       {/* Bar Chart */}
-      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-3">
+      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-2">
         <ResponsiveContainer width="100%" height={400}>
           <BarChart
             data={chartData}
