@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings, Layers, Shield } from 'lucide-react';
+import React from 'react';
+import { ShieldCheck, Wifi, LayoutDashboard, History, Bot, Network, Settings, Layers } from 'lucide-react';
 const primaryItems = [
   { name: 'Dashboard', icon: LayoutDashboard, tab: 'dashboard' },
   { name: 'Devices', icon: Wifi, tab: 'devices' },

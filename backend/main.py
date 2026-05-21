@@ -5,6 +5,7 @@ import math
 import os
 import subprocess
 import sys
+import threading
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
 from pathlib import Path
@@ -120,8 +121,8 @@ def _detect_hotspot_interface() -> str:
     # 2) Fallback: pick an interface with a private IP address likely used by hotspots
     try:
         result = subprocess.run(["ip", "-4", "-o", "addr", "show"], check=True, capture_output=True, text=True)
-        for l in result.stdout.splitlines():
-            parts = l.split()
+        for line in result.stdout.splitlines():
+            parts = line.split()
             if len(parts) >= 4:
                 iface = parts[1]
                 addr = parts[3]
@@ -450,7 +451,7 @@ async def _enforcement_loop():
                         ENFORCED_BLOCKS[ip] = row.get('status') or 'Blocked'
                         enforcer.block_device(ip, segment=seg)
                         database.add_or_update_device(ip, row.get('mac', ''), time.time(), vendor=row.get('vendor'), device_type=row.get('device_type'), status='Quarantined', mb_limit=row.get('mb_limit', 100.0), segment=seg)
-                        database.add_log('AUTO_BLOCK', ip=ip, detail=f'auto-blocked (offline)')
+                        database.add_log('AUTO_BLOCK', ip=ip, detail='auto-blocked (offline)')
                         try:
                             await manager.broadcast({'event': 'STATUS_UPDATE', 'ip': ip, 'status': 'Quarantined'})
                         except Exception:
@@ -649,7 +650,6 @@ def on_anomaly_detected(ip: str):
         pass
 
 # Monitor Start (Limit set to 50MB for testing)
-import threading
 monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
 threading.Thread(target=monitor.start_monitoring, daemon=True).start()
 

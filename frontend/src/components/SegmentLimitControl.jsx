@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 
 export default function SegmentLimitControl({ devices = [], handleLimitForIps }) {
   const [limit, setLimit] = useState('');
-  const applying = false;
 
   const apply = async () => {
     if (!limit || !devices || devices.length === 0) return;

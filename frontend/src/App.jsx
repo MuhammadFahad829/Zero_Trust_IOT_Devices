@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, ShieldAlert, ShieldCheck, Menu, Filter, Layers, CheckCircle, ArrowUpRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -7,12 +7,12 @@ import AuditLogsTable from './components/AuditLogsTable';
 import HotspotBanner from './components/HotspotBanner';
 import TopDevices from './components/TopDevices';
 import Segmentation from './components/Segmentation';
+import { containerVariant } from './utils/animations';
+import { inferCategory, getDisplayName } from './utils/deviceIdentity';
 
 const ThreatVault = lazy(() => import('./components/ThreatVault'));
 const NetworkTopology = lazy(() => import('./components/NetworkTopology'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
-import { containerVariant } from './utils/animations';
-import { inferCategory, getDisplayName } from './utils/deviceIdentity';
 
 const App = () => {
   const [devices, setDevices] = useState([]);
@@ -21,7 +21,7 @@ const App = () => {
   const [totalBandwidth, setTotalBandwidth] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [hotspotActive, setHotspotActive] = useState(true);
-  const [devMode, setDevMode] = useState(() => {
+  const [devMode] = useState(() => {
     try {
       return localStorage.getItem('devHotspot') === '1';
     } catch (e) {
@@ -34,7 +34,7 @@ const App = () => {
   const [availableSegments, setAvailableSegments] = useState([]);
   const [viewMode, setViewMode] = useState('professional');
 
-  const fetchMode = async () => {
+  const fetchMode = useCallback(async () => {
     try {
       const res = await fetch('http://localhost:8000/mode');
       const data = await res.json();
@@ -45,7 +45,7 @@ const App = () => {
     } catch (err) {
       // keep last known state on error
     }
-  };
+  }, [devMode]);
 
   // persist dev mode and ensure hotspotActive reflects it immediately
   useEffect(() => {
@@ -182,7 +182,7 @@ const App = () => {
       window.removeEventListener('refresh:mode', onRefresh);
       window.removeEventListener('navigate:devices', onNavigateDevices);
     };
-  }, []);
+  }, [fetchMode]);
 
   useEffect(() => {
     const fetchTraffic = async () => {

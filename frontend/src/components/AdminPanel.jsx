@@ -20,8 +20,6 @@ export default function AdminPanel({ hotspotActive = true }) {
   const [segmentQuery, setSegmentQuery] = useState('');
   const [policiesText, setPoliciesText] = useState('');
   const [savingPolicies, setSavingPolicies] = useState(false);
-  const [dryRun, setDryRun] = useState(false);
-  const [dryRunLoading, setDryRunLoading] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('PROVISION_TOKEN');
@@ -37,12 +35,6 @@ export default function AdminPanel({ hotspotActive = true }) {
           const p = await fetch('http://localhost:8000/policies');
           const pj = await p.json();
           setPoliciesText(JSON.stringify(pj.policies || pj || {}, null, 2));
-        } catch (e) {}
-        // fetch dry-run status
-        try {
-          const dr = await fetch('http://localhost:8000/enforcer/dryrun');
-          const dj = await dr.json();
-          setDryRun(Boolean(dj.dry_run));
         } catch (e) {}
         } catch (e) {
         // ignore

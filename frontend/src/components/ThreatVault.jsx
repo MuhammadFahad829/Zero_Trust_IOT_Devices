@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
-import { getDisplayName, getVendorMeta, inferCategory, getCategoryMeta } from '../utils/deviceIdentity';
+import { getDisplayName, getVendorMeta, inferCategory } from '../utils/deviceIdentity';
 import { formatBytes } from '../utils/format';
 
 export default function ThreatVault({ devices }) {
