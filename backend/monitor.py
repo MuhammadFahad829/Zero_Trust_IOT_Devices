@@ -15,8 +15,6 @@ except Exception:
     IP = _DummyIP
 import database
 import telemetry
-import time
-from functools import wraps
 
 
 class TrafficMonitor:
