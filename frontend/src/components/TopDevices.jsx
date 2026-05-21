@@ -5,17 +5,17 @@ import { getDisplayName } from '../utils/deviceIdentity';
 export default function TopDevices({ devices = [], onVerify = () => {}, onBlock = () => {} }) {
   const top = devices.slice(0, 8);
   return (
-    <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-3">
-      <div className="flex items-center justify-between mb-2">
+    <div className="card-soft p-2 rounded-xl">
+      <div className="flex items-center justify-between mb-1">
         <h3 className="text-lg font-semibold">Top Devices</h3>
         <span className="text-xs text-gray-400">Live</span>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {top.map((d) => {
           const usagePct = Math.min(((d.trafficMB || 0) / (d.mb_limit || 100)) * 100, 100);
           const isBlocked = d.status === 'Quarantined' || d.status === 'Blocked';
           return (
-            <div key={d.ip} className="flex items-center gap-3">
+            <div key={d.ip} className="flex items-center gap-2">
               <div className="w-12 flex-shrink-0">
                 <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">{getDisplayName(d).slice(0,2).toUpperCase()}</div>
               </div>
@@ -37,11 +37,11 @@ export default function TopDevices({ devices = [], onVerify = () => {}, onBlock 
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 ml-2">
-                <button onClick={() => onVerify(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-green-900/40 text-green-300 text-sm hover:bg-green-900/60 disabled:opacity-40" aria-label={`Verify ${getDisplayName(d)}`}>
+              <div className="flex flex-col gap-1 ml-2">
+                <button onClick={() => onVerify(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-2 py-1 rounded bg-green-900/40 text-green-300 text-sm hover:bg-green-900/60 disabled:opacity-40" aria-label={`Verify ${getDisplayName(d)}`}>
                   <CheckCircle size={14} />
                 </button>
-                <button onClick={() => onBlock(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-3 py-1 rounded bg-red-900/40 text-red-300 text-sm hover:bg-red-900/60 disabled:opacity-40" aria-label={`Block ${getDisplayName(d)}`}>
+                <button onClick={() => onBlock(d.ip)} disabled={!d.online} className="inline-flex items-center gap-2 px-2 py-1 rounded bg-red-900/40 text-red-300 text-sm hover:bg-red-900/60 disabled:opacity-40" aria-label={`Block ${getDisplayName(d)}`}>
                   <ShieldAlert size={14} />
                 </button>
               </div>

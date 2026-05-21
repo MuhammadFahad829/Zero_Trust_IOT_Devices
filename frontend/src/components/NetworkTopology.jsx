@@ -154,7 +154,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-4 md:p-5 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)] rounded-2xl">
+      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-3 md:p-4 space-y-3 shadow-[0_18px_50px_rgba(15,23,42,0.25)] rounded-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/20 text-blue-300">
@@ -205,28 +205,28 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-sm">
-        <div className="card-soft border border-emerald-500/20 bg-emerald-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+        <div className="card-soft border border-emerald-500/20 bg-emerald-950/10 p-3 flex items-center justify-between rounded-xl">
           <div>
             <p className="text-emerald-300 font-semibold text-lg">{devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length}</p>
             <p className="text-xs text-gray-400">Active</p>
           </div>
           <div className="text-emerald-400"><CheckCircle /></div>
         </div>
-        <div className="card-soft border border-red-500/20 bg-red-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+        <div className="card-soft border border-red-500/20 bg-red-950/10 p-3 flex items-center justify-between rounded-xl">
           <div>
             <p className="text-red-300 font-semibold text-lg">{quarantinedCount}</p>
             <p className="text-xs text-gray-400">Quarantined</p>
           </div>
           <div className="text-red-400"><ShieldAlert /></div>
         </div>
-        <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+        <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-3 flex items-center justify-between rounded-xl">
           <div>
             <p className="text-blue-300 font-semibold text-lg">{segmentedCount}</p>
             <p className="text-xs text-gray-400">Segmented</p>
           </div>
           <div className="text-blue-400"><Radio size={18} /></div>
         </div>
-        <div className="card-soft border border-gray-500/20 bg-gray-950/10 p-3.5 flex items-center justify-between rounded-2xl">
+        <div className="card-soft border border-gray-500/20 bg-gray-950/10 p-3 flex items-center justify-between rounded-xl">
           <div>
             <p className="text-gray-200 font-semibold text-lg">{unassignedCount}</p>
             <p className="text-xs text-gray-400">Unassigned</p>
@@ -235,8 +235,8 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
         </div>
       </div>
 
-      <div className="card-soft border border-gray-800/60 bg-gray-950/40 p-4 rounded-2xl">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
+      <div className="card-soft border border-gray-800/60 bg-gray-950/40 p-3 rounded-xl">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-2">
           <div>
             <p className="text-[10px] uppercase tracking-[0.28em] text-gray-500 mb-1">Device classes</p>
             <h4 className="text-sm font-semibold text-gray-100">Personal, private, other, and core device types</h4>
@@ -269,7 +269,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
           >
             <Wifi className="text-white" size={viewportWidth < 640 ? 20 : 28} />
           </motion.div>
-          <div className="mt-3 text-xs sm:text-sm text-blue-300 font-semibold">Zero-Trust Gateway</div>
+          <div className="mt-2 text-xs sm:text-sm text-blue-300 font-semibold">Zero-Trust Gateway</div>
           <div className="mt-1 text-[10px] text-gray-400 uppercase tracking-[0.28em]">{modeLabel}</div>
         </div>
 
@@ -288,7 +288,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 + index * 0.04 }}
-              className="absolute rounded-2xl border bg-gray-950/55 backdrop-blur-md shadow-[0_12px_34px_rgba(15,23,42,0.28)] overflow-hidden"
+              className="absolute rounded-xl border bg-gray-950/55 backdrop-blur-md shadow-[0_12px_34px_rgba(15,23,42,0.28)] overflow-hidden"
               style={{ ...style, borderColor: `${chipColor}55` }}
             >
               <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/5" style={{ background: `${chipColor}12` }}>
@@ -304,7 +304,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
                 </span>
               </div>
 
-              <div className="p-3">
+              <div className="p-2">
                 <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
                   {group.devices.map((device) => {
                     const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
@@ -363,18 +363,18 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
                 </div>
               </div>
 
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2 flex gap-2">
                 <button
                   onClick={() => doAction(d.ip, 'allow')}
                   disabled={actionLoading[d.ip]}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-green-600/90 text-white text-[13px]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-2 py-1 rounded bg-green-600/90 text-white text-[13px]"
                 >
                   <ArrowRight size={14} /> Allow
                 </button>
                 <button
                   onClick={() => doAction(d.ip, 'block')}
                   disabled={actionLoading[d.ip]}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-red-600/90 text-white text-[13px]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-2 py-1 rounded bg-red-600/90 text-white text-[13px]"
                 >
                   <StopCircle size={14} /> Quarantine
                 </button>

@@ -27,8 +27,8 @@ export default function AuditLogsTable({ logs = [] }) {
   }, [logs]);
 
   return (
-    <div className="card-soft p-4 md:p-5 rounded-2xl border border-gray-800/60 bg-gray-900/20">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-3">
+    <div className="card-soft p-3 md:p-4 rounded-xl border border-gray-800/60 bg-gray-900/20">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-2">
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-blue-300/70 mb-1">Activity stream</p>
           <h2 className="text-2xl font-bold text-white">Audit Logs</h2>
@@ -53,13 +53,13 @@ export default function AuditLogsTable({ logs = [] }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4 text-[11px] text-gray-300">
+      <div className="flex flex-wrap gap-2 mb-3 text-[11px] text-gray-300">
         <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Total logs: {summary.total}</span>
         <span className="px-3 py-1 rounded-full border border-red-500/20 bg-red-950/10 text-red-200">Quarantine / block: {summary.quarantines}</span>
         <span className="px-3 py-1 rounded-full border border-green-500/20 bg-green-950/10 text-green-200">Allow / release: {summary.allows}</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 text-sm">
         <div className="card-soft px-3 py-2 rounded-2xl border border-gray-800/60 bg-gray-950/20">
           <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Total logs</div>
           <div className="mt-1 text-2xl font-semibold text-gray-100">{summary.total}</div>
@@ -74,7 +74,7 @@ export default function AuditLogsTable({ logs = [] }) {
         </div>
       </div>
 
-      <div className="overflow-auto max-h-[60vh] rounded-2xl border border-gray-800/60 bg-gray-950/20">
+      <div className="overflow-auto max-h-[60vh] rounded-xl border border-gray-800/60 bg-gray-950/20">
         <table className="w-full text-left text-sm">
           <thead className="text-gray-400 text-xs uppercase sticky top-0 bg-gray-950/95 backdrop-blur z-10">
             <tr>

@@ -21,7 +21,7 @@ export default function TrafficChart({ device }) {
 
   if (trafficData.length === 0) {
     return (
-      <div className="mt-4 h-32 bg-gray-900/30 rounded-lg p-3 flex flex-col items-center justify-center text-xs text-gray-500 border border-dashed border-gray-700 gap-1">
+      <div className="mt-3 h-28 bg-gray-900/30 rounded-lg p-2 flex flex-col items-center justify-center text-xs text-gray-500 border border-dashed border-gray-700 gap-1">
         <span>Waiting for live traffic samples...</span>
         <span className="font-mono text-[11px] text-gray-600">Current: {latestRate.toFixed(3)} MB/s · Total: {totalUsage} bytes</span>
       </div>
@@ -29,7 +29,7 @@ export default function TrafficChart({ device }) {
   }
 
   return (
-    <div className="mt-4 h-36 bg-gray-900/30 rounded-lg p-2 border border-gray-800/50">
+    <div className="mt-3 h-32 bg-gray-900/30 rounded-lg p-2 border border-gray-800/50">
       <div className="flex items-center justify-between px-1 pb-2 text-[11px] text-gray-400">
         <span>Live traffic history</span>
         <span className="font-mono text-gray-300">{latestRate.toFixed(3)} MB/s</span>
