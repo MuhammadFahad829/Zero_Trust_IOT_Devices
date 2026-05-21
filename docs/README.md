@@ -36,6 +36,43 @@ npm install
 npm start
 ```
 
+## Linting & Tests
+
+Run Python linters and tests:
+
+```bash
+source .venv/bin/activate
+pip install ruff flake8 pytest
+ruff . || flake8 .
+pytest -q
+```
+
+Run frontend linters and tests:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm test
+```
+
+Run Playwright E2E locally (after building frontend):
+
+```bash
+cd frontend
+npm ci
+npm run build
+npx playwright install
+npx playwright test --config=../ci/playwright.config.js
+```
+
+Release helper:
+
+```bash
+./scripts/release.sh
+```
+
+
 ## Deployment Notes
 
 - Root privileges are required for `scapy`, `iptables`, and VLAN provisioning.

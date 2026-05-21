@@ -1,3 +1,20 @@
+const { devices } = require('@playwright/test');
+
+/** @type {import('@playwright/test').PlaywrightTestConfig} */
+module.exports = {
+  timeout: 30 * 1000,
+  use: {
+    headless: true,
+  },
+  webServer: {
+    command: 'npx serve -s frontend/build -l 3000',
+    port: 3000,
+    reuseExistingServer: false,
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
+  ]
+};
 /** @type {import('@playwright/test').PlaywrightTestConfig} */
 module.exports = {
   testDir: '../../frontend/e2e/tests',
