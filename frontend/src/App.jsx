@@ -354,7 +354,7 @@ const App = () => {
         />
       )}
 
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 main-content">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 main-content">
         <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6 md:mb-10">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full flex flex-col md:flex-row md:items-center md:gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -484,7 +484,7 @@ const App = () => {
 
         {activeTab === 'devices' && (
           <div>
-            <div className="mb-8 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="mb-8 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <h1 className="text-4xl font-bold text-white mb-2">All Connected Devices</h1>
                 <p className="text-gray-400">View and manage all {devices.length} devices across your network</p>
@@ -505,8 +505,8 @@ const App = () => {
               </div>
             </div>
 
-            <div className="mb-6 rounded-2xl border border-gray-800 bg-gray-900/35 p-4 md:p-5 shadow-lg shadow-black/10">
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-end">
+            <div className="mb-4 rounded-2xl border border-gray-800 bg-gray-900/35 p-3 md:p-4 shadow-lg shadow-black/10">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-2 items-end">
                 <div className="xl:col-span-3">
                   <label className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-gray-500">
                     <Filter size={12} /> Segment filter
@@ -514,7 +514,7 @@ const App = () => {
                   <select
                     value={segmentFilter}
                     onChange={(e) => setSegmentFilter(e.target.value)}
-                    className="w-full px-3 py-3 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm"
+                    className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm"
                   >
                     <option value="all">All Devices ({arrangedDevices.length})</option>
                     <option value="unassigned">Unassigned ({arrangedDevices.filter((d) => !d.segment).length})</option>
@@ -535,7 +535,7 @@ const App = () => {
                     value={bulkSegment}
                     onChange={(e) => setBulkSegment(e.target.value)}
                     placeholder="e.g., iot, work, home"
-                    className="w-full px-3 py-3 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm"
+                    className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm"
                   />
                 </div>
 
@@ -546,7 +546,7 @@ const App = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setSelectedDevices(new Set(filteredDevices.map((d) => d.ip)))}
-                      className="flex-1 px-3 py-3 rounded-xl bg-blue-500/20 border border-blue-500/50 text-blue-200 text-sm hover:bg-blue-500/30 inline-flex items-center justify-center gap-2"
+                      className="flex-1 px-3 py-2 rounded-xl bg-blue-500/20 border border-blue-500/50 text-blue-200 text-sm hover:bg-blue-500/30 inline-flex items-center justify-center gap-2"
                     >
                       <CheckCircle size={14} /> Select All
                     </button>
@@ -563,13 +563,13 @@ const App = () => {
                   <button
                     onClick={() => handleBulkSegment(bulkSegment)}
                     disabled={selectedDevices.size === 0 || !bulkSegment.trim()}
-                    className="flex-1 px-4 py-3 rounded-xl bg-accent-blue text-white font-medium text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-2 rounded-xl bg-accent-blue text-white font-medium text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                   >
                     Apply to {selectedDevices.size}
                   </button>
                   <button
                     onClick={() => setViewMode(viewMode === 'professional' ? 'compact' : 'professional')}
-                    className="px-4 py-3 rounded-xl bg-gray-800 text-gray-200 font-medium text-sm hover:bg-gray-700"
+                    className="px-4 py-2 rounded-xl bg-gray-800 text-gray-200 font-medium text-sm hover:bg-gray-700"
                   >
                     {viewMode === 'professional' ? 'Compact' : 'Professional'}
                   </button>
@@ -577,7 +577,7 @@ const App = () => {
               </div>
 
               {selectedDevices.size > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-700">
+                <div className="mt-3 pt-3 border-t border-gray-700">
                   <p className="text-xs text-gray-400 mb-2">Quick assign:</p>
                   <div className="flex flex-wrap gap-2">
                     {['iot', 'home', 'work', 'guest', 'camera', 'network', 'personal'].map((seg) => (
@@ -600,12 +600,12 @@ const App = () => {
               )}
             </div>
 
-            <div className="space-y-4">
+                <div className="space-y-3">
               {viewMode === 'professional' ? (
                 <div className="rounded-2xl border border-gray-800 bg-gray-900/25 overflow-hidden">
                   <div className="overflow-x-auto">
                     <div className="min-w-[1080px]">
-                      <div className="grid grid-cols-12 gap-3 px-6 py-4 bg-gray-900/35 text-[11px] uppercase tracking-[0.22em] text-gray-500 sticky top-0 z-10 border-b border-gray-800/60">
+                      <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-900/35 text-[11px] uppercase tracking-[0.22em] text-gray-500 sticky top-0 z-10 border-b border-gray-800/60">
                         <div className="col-span-1 text-center">Sel</div>
                         <div className="col-span-2">Device</div>
                         <div className="col-span-1 text-center">Status</div>
@@ -623,7 +623,7 @@ const App = () => {
                           return (
                             <div
                               key={device.ip}
-                              className={`grid grid-cols-12 gap-3 px-6 py-4 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
+                              className={`grid grid-cols-12 gap-2 px-4 py-3 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
                             >
                               <div className="col-span-1 flex justify-center">
                                 <button
@@ -715,7 +715,7 @@ const App = () => {
                   variants={containerVariant}
                   initial="hidden"
                   animate="visible"
-                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6"
+                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
                 >
                   {filteredDevices.map((device) => (
                     <div key={device.ip} className="relative">
