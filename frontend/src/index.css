@@ -136,7 +136,8 @@ main.main-content { max-width: 1200px; margin: 0 auto; }
 /* Ensure main content is offset when sidebar is visible on larger screens */
 @media (min-width: 768px) {
 	/* sidebar uses w-60 (15rem) so keep main offset aligned */
-	main.main-content { margin-left: 15rem; }
+	/* reduce left offset slightly to tighten gap against sidebar */
+	main.main-content { margin-left: 12rem; }
 }
 
 /* Slightly soften card shadows for a cleaner, less heavy look */
