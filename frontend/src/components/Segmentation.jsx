@@ -75,22 +75,21 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-5">
         <h1 className="text-3xl font-bold text-white mb-2">Segmentation & Limits</h1>
         <p className="text-gray-400">Macro segmentation overview and per-device limit adjustments.</p>
       </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-6">
-        <div className="xl:col-span-8 bg-gray-900/40 border border-gray-800 rounded-2xl p-4 md:p-5">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 mb-5">
+        <div className="xl:col-span-8 bg-gray-900/40 border border-gray-800 rounded-2xl p-3 md:p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-2">
                 <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-200 border border-blue-500/20 text-xs">{devices.length} devices</span>
                 <span className="px-3 py-1 rounded-full bg-green-500/10 text-green-200 border border-green-500/20 text-xs">{previewSummary.onlineCount} online in preview</span>
                 <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20 text-xs">{availableSegments.length} known segments</span>
               </div>
               <label className="block text-sm font-medium text-gray-300">Filter by Segment</label>
-              <select value={selectedSegment} onChange={(e) => setSelectedSegment(e.target.value)} className="mt-2 w-full lg:w-80 px-3 py-3 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm">
+              <select value={selectedSegment} onChange={(e) => setSelectedSegment(e.target.value)} className="mt-2 w-full lg:w-80 px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm">
                 <option value="all">All Devices ({devices.length})</option>
                 <option value="unassigned">Unassigned ({segmentCounts.get('unassigned') || 0})</option>
                 {availableSegments.map((seg) => (
@@ -105,7 +104,7 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
               <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Filtered Devices</div>
               <div className="mt-1 text-2xl font-bold text-white">{filtered.length}</div>
@@ -132,12 +131,12 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
           </div>
         </div>
 
-        <div className="xl:col-span-4 space-y-4">
-          <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 md:p-5">
+        <div className="xl:col-span-4 space-y-3">
+          <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-3 md:p-4">
             <h3 className="text-lg font-semibold text-white mb-1">Bulk Preview</h3>
             <p className="text-xs text-gray-400 mb-4">Review selected devices before applying changes.</p>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-2 gap-2 mb-4">
               <div className="rounded-xl bg-gray-950/30 border border-gray-800 p-3">
                 <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Selected</div>
                 <div className="text-xl font-bold text-white mt-1">{previewSummary.selectedCount}</div>
@@ -148,23 +147,23 @@ export default function Segmentation({ devices = [], availableSegments = [], sel
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Set limit (MB) for selected</label>
-              <input
-                type="number"
-                value={bulkLimitInput}
-                onChange={(e) => setBulkLimitInput(e.target.value)}
-                placeholder="e.g., 500"
-                className="w-full px-3 py-3 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm mb-2"
-              />
-              <button
-                onClick={() => { if (bulkLimitInput && selectedDevices.size > 0) handleBulkLimit(Number(bulkLimitInput)); }}
-                disabled={selectedDevices.size === 0 || !bulkLimitInput}
-                className="w-full px-3 py-3 rounded-xl bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Apply Limit
-              </button>
-            </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Set limit (MB) for selected</label>
+                <input
+                  type="number"
+                  value={bulkLimitInput}
+                  onChange={(e) => setBulkLimitInput(e.target.value)}
+                  placeholder="e.g., 500"
+                  className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm mb-2"
+                />
+                <button
+                  onClick={() => { if (bulkLimitInput && selectedDevices.size > 0) handleBulkLimit(Number(bulkLimitInput)); }}
+                  disabled={selectedDevices.size === 0 || !bulkLimitInput}
+                  className="w-full px-3 py-2 rounded-xl bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply Limit
+                </button>
+              </div>
 
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-300 mb-2">Set limit for current segment (MB)</label>

@@ -30,7 +30,7 @@ const Sidebar = ({
   return (
     <div
       className={[
-        'w-64 bg-card h-full flex flex-col border-r border-gray-800/50 p-5 sm:p-6 overflow-y-auto',
+        'w-60 bg-card h-full flex flex-col border-r border-gray-800/50 p-4 sm:p-5 overflow-y-auto',
         'fixed md:static top-0 left-0 z-40 transition-transform duration-300',
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       ].join(' ')}
@@ -49,7 +49,7 @@ const Sidebar = ({
           </button>
         </div>
       )}
-      <div className="flex items-center gap-3 sm:gap-4 mb-8 sm:mb-10">
+      <div className="flex items-center gap-3 sm:gap-3 mb-6 sm:mb-8">
         <div className="shrink-0 p-2.5 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
           <ShieldCheck size={28} />
         </div>
@@ -59,14 +59,14 @@ const Sidebar = ({
         </div>
       </div>
 
-      <div className="mb-5 rounded-2xl border border-gray-800/60 bg-gray-950/40 p-4 sm:p-4.5">
+      <div className="mb-4 rounded-2xl border border-gray-800/60 bg-gray-950/40 p-3 sm:p-4">
         <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.32em] text-gray-500">Live overview</p>
-        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 text-sm">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2.5">
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
             <div className="text-gray-500 text-[11px]">Devices</div>
             <div className="font-semibold text-gray-100">{deviceCount}</div>
           </div>
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2.5">
+          <div className="rounded-xl bg-gray-900/50 border border-gray-800/80 px-3 py-2">
             <div className="text-gray-500 text-[11px]">Threats</div>
             <div className="font-semibold text-red-300">{threatCount}</div>
           </div>

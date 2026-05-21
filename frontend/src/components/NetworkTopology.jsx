@@ -154,7 +154,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-5 md:p-6 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)] rounded-2xl">
+      <div className="card-soft border border-blue-500/20 bg-blue-950/10 p-4 md:p-5 space-y-4 shadow-[0_18px_50px_rgba(15,23,42,0.25)] rounded-2xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/20 text-blue-300">
@@ -176,21 +176,21 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
             <span className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/40">Devices: {devices.length}</span>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
           <div className="relative">
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search IP, vendor, segment, status..."
-              className="w-full rounded-xl border border-gray-800/80 bg-gray-950/60 px-4 py-2.5 pr-10 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+              className="w-full rounded-xl border border-gray-800/80 bg-gray-950/60 px-4 py-2 pr-10 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/15"
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">⌕</div>
           </div>
           <button
             type="button"
             onClick={() => setSearchTerm('')}
-            className="btn btn-ghost h-full px-4 py-2.5 text-sm"
+            className="btn btn-ghost h-full px-4 py-2 text-sm"
             disabled={!searchTerm}
           >
             Clear
@@ -204,7 +204,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-sm">
         <div className="card-soft border border-emerald-500/20 bg-emerald-950/10 p-3.5 flex items-center justify-between rounded-2xl">
           <div>
             <p className="text-emerald-300 font-semibold text-lg">{devices.filter((d) => d.status === 'Allowed' || d.status === 'Verified').length}</p>
@@ -260,7 +260,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative min-h-[420px] card-soft p-4 sm:p-6 overflow-hidden border border-gray-800/60 rounded-2xl">
+      <div ref={containerRef} className="relative min-h-[420px] card-soft p-3 sm:p-5 overflow-hidden border border-gray-800/60 rounded-2xl">
         <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
           <motion.div
             animate={{ boxShadow: ['0_0_0_0_rgba(59,130,246,0.35)', '0_0_0_18px_rgba(59,130,246,0)'] }}

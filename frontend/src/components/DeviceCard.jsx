@@ -134,14 +134,14 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
     <div
       className={[
         'border transition-all duration-200 overflow-hidden relative bg-card/70',
-        compact ? 'p-3 rounded-xl flex flex-col justify-between h-full min-w-[220px] max-w-[320px] flex-shrink-0' : 'p-6 rounded-2xl',
+        compact ? 'p-3 rounded-xl flex flex-col justify-between h-full min-w-[220px] max-w-[320px] flex-shrink-0' : 'p-4 rounded-2xl',
         isBlocked ? 'border-red-500/40' : 'border-green-500/20',
         device.alert ? 'pulse-red' : '',
       ].join(' ')}
     >
       {isBlocked && <div className="absolute inset-0 border-2 border-red-500/20 rounded-2xl pointer-events-none" />}
 
-      <div className={`flex justify-between items-start ${compact ? 'mb-2' : 'mb-4'}`}>
+      <div className={`flex justify-between items-start ${compact ? 'mb-2' : 'mb-3'}`}>
         <div className={`${compact ? 'p-2.5 rounded-xl' : 'p-3 rounded-lg'} ${
           isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
         }`} style={!isBlocked ? { backgroundColor: categoryMeta.bg, color: categoryMeta.color } : undefined}>
@@ -192,7 +192,7 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
           </div>
         </div>
 
-      <div className={`grid grid-cols-2 gap-2 text-xs ${compact ? 'mb-2 mt-3' : 'mb-3 mt-0'}`}>
+      <div className={`grid grid-cols-2 gap-2 text-xs ${compact ? 'mb-2 mt-3' : 'mb-2 mt-0'}`}>
         <div className="bg-gray-900/35 border border-gray-700 rounded-lg p-2">
           <p className="text-gray-400">Live Rate</p>
           <p className="font-mono text-sm text-gray-100">{(device.trafficMbps || 0).toFixed(3)} MB/s</p>

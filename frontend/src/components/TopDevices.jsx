@@ -5,12 +5,12 @@ import { getDisplayName } from '../utils/deviceIdentity';
 export default function TopDevices({ devices = [], onVerify = () => {}, onBlock = () => {} }) {
   const top = devices.slice(0, 8);
   return (
-    <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-3">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold">Top Devices</h3>
         <span className="text-xs text-gray-400">Live</span>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {top.map((d) => {
           const usagePct = Math.min(((d.trafficMB || 0) / (d.mb_limit || 100)) * 100, 100);
           const isBlocked = d.status === 'Quarantined' || d.status === 'Blocked';
@@ -32,7 +32,7 @@ export default function TopDevices({ devices = [], onVerify = () => {}, onBlock 
                   </div>
                 </div>
 
-                <div className="mt-2 h-3 bg-gray-800 rounded-full overflow-hidden">
+                <div className="mt-1.5 h-3 bg-gray-800 rounded-full overflow-hidden">
                   <div className={`${usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${usagePct}%`, height: '100%' }} />
                 </div>
               </div>
