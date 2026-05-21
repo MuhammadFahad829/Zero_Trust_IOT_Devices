@@ -18,12 +18,12 @@ export default function SegmentLimitControl({ devices = [], handleLimitForIps })
         value={limit}
         onChange={(e) => setLimit(e.target.value)}
         placeholder="e.g., 500"
-        className="w-full px-3 py-3 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm mb-2"
+        className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-gray-100 text-sm mb-2"
       />
       <button
         onClick={apply}
         disabled={devices.length === 0 || !limit}
-        className="w-full px-3 py-3 rounded-xl bg-indigo-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full btn btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Apply to segment ({devices.length} devices)
       </button>

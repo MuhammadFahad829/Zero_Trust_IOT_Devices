@@ -5,7 +5,7 @@ export default function LiveGraph({ data }) {
   const chartData = useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
   return (
-    <div className="w-full h-64 rounded-xl border border-gray-800/60 bg-gray-950/30 p-3">
+    <div className="w-full h-64 rounded-xl card-soft p-3">
       <ResponsiveContainer>
         <LineChart data={chartData} margin={{ top: 8, right: 12, left: -18, bottom: 6 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />

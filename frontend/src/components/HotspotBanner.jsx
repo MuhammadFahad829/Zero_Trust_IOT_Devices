@@ -2,8 +2,8 @@ import React from 'react';
 import { WifiOff } from 'lucide-react';
 
 const HotspotBanner = ({ onRefresh }) => (
-  <div className="rounded-xl border border-yellow-600/40 bg-yellow-900/10 text-yellow-200 p-4 mb-6">
-    <div className="flex items-center justify-between gap-4">
+  <div className="card-soft rounded-xl border border-yellow-600/40 bg-yellow-900/10 text-yellow-200 p-3 mb-5">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <WifiOff className="text-yellow-400" />
         <div>

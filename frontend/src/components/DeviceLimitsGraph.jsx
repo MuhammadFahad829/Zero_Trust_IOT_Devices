@@ -91,7 +91,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header */}
       <div className="space-y-1">
         <h3 className="text-lg font-bold text-white">Device Limits & Usage</h3>
@@ -101,7 +101,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-3">
           <div className="text-xs text-gray-400 font-semibold">Total Devices</div>
           <div className="text-2xl font-bold text-white mt-1">{devices.length}</div>
@@ -137,7 +137,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
       </div>
 
       {/* Per-segment aggregate chart */}
-      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-4">
+      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-3">
         <h4 className="text-sm font-semibold text-white mb-3">Segment Totals</h4>
         <div style={{ width: '100%', height: 220 }}>
           <ResponsiveContainer width="100%" height={220}>
@@ -155,7 +155,7 @@ const DeviceLimitsGraph = ({ devices = [] }) => {
       </div>
 
       {/* Bar Chart */}
-      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-4">
+      <div className="bg-gray-900/20 border border-gray-700/50 rounded-lg p-3">
         <ResponsiveContainer width="100%" height={400}>
           <BarChart
             data={chartData}
