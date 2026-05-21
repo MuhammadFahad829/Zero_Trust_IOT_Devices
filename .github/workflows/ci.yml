@@ -7,6 +7,65 @@ on:
     branches: [ main, master ]
 
 jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install backend deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r backend/requirements.txt
+
+      - name: Start backend
+        run: |
+          source .venv/bin/activate
+          nohup python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > backend_ci.log 2>&1 &
+
+      - name: Wait for backend
+        run: |
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/devices >/dev/null 2>&1; then
+              echo 'backend ready' && break
+            fi
+            sleep 1
+          done
+
+      - name: Run backend tests
+        run: |
+          source .venv/bin/activate
+          pytest -q
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build --silent
+
+      - name: Integration smoke checks
+        run: |
+          curl -sS http://127.0.0.1:8000/devices | jq '.devices | {count: (length)}' || true
+          curl -sS http://127.0.0.1:8000/traffic || true
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
