@@ -355,6 +355,12 @@ const App = () => {
       )}
 
       <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 main-content">
+        <div className="mb-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg sm:text-xl font-bold text-white">ZeroTrust IoT Gateway</h1>
+            <span className="text-sm text-gray-400 hidden sm:inline">Network Control Center</span>
+          </div>
+        </div>
         <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mb-4 md:mb-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full flex flex-col md:flex-row md:items-center md:gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
