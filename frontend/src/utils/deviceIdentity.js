@@ -43,20 +43,23 @@ function fallbackToken(value) {
 }
 
 export function getVendorMeta(vendor) {
-  if (!vendor) {
+  try {
+    if (!vendor) {
+      return { name: 'Unknown Device', token: 'DV', color: '#4b5563' };
+    }
+    const v = String(vendor).trim();
+    const rule = VENDOR_RULES.find((r) => r.match.test(v));
+    if (rule) {
+      return { name: rule.name, token: rule.token, color: rule.color };
+    }
+    return {
+      name: v,
+      token: fallbackToken(v),
+      color: '#0f766e',
+    };
+  } catch (e) {
     return { name: 'Unknown Device', token: 'DV', color: '#4b5563' };
   }
-
-  const rule = VENDOR_RULES.find((r) => r.match.test(vendor));
-  if (rule) {
-    return { name: rule.name, token: rule.token, color: rule.color };
-  }
-
-  return {
-    name: vendor,
-    token: fallbackToken(vendor),
-    color: '#0f766e',
-  };
 }
 
 export function inferCategory(deviceType, vendor) {
@@ -65,12 +68,12 @@ export function inferCategory(deviceType, vendor) {
   if (text.includes('personal') || text.includes('personal device')) return 'Personal';
   if (text.includes('private') || text.includes('private device') || text.includes('randomized')) return 'Private';
 
-  if (text.includes('mobile') || text.includes('phone')) return 'Mobile';
-  if (text.includes('laptop') || text.includes('desktop') || text.includes('pc')) return 'Computer';
-  if (text.includes('camera') || text.includes('ipcamera')) return 'Camera';
-  if (text.includes('router') || text.includes('gateway')) return 'Network';
-  if (text.includes('tv') || text.includes('speaker') || text.includes('appliance')) return 'Smart Appliance';
-  if (text.includes('iot')) return 'IoT';
+  if (text.includes('mobile') || text.includes('phone') || text.includes('android') || text.includes('ios')) return 'Mobile';
+  if (text.includes('laptop') || text.includes('desktop') || text.includes('pc') || text.includes('notebook')) return 'Computer';
+  if (text.includes('camera') || text.includes('ipcamera') || text.includes('dvr')) return 'Camera';
+  if (text.includes('router') || text.includes('gateway') || text.includes('appliance')) return 'Network';
+  if (text.includes('tv') || text.includes('speaker') || text.includes('appliance') || text.includes('media')) return 'Smart Appliance';
+  if (text.includes('iot') || text.includes('sensor') || text.includes('thermostat')) return 'IoT';
   return 'Other';
 }
 
@@ -108,7 +111,7 @@ export function getDisplayName(device) {
 
   // Treat explicitly-private/randomized vendor strings as unknown and prefer
   // device type or MAC tail for a clearer display name.
-  if (device.vendor && !/private|randomized|private\/randomized mac/i.test(device.vendor)) {
+  if (device.vendor && !/private|randomized|private\/randomized|randomized mac/i.test(String(device.vendor))) {
     if (category === 'Other') return vendor.name;
     return `${vendor.name} ${category}`;
   }

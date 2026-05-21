@@ -10,14 +10,9 @@ export const cardVariant = {
     transition: { type: 'spring', stiffness: 110, damping: 18 },
   },
   alert: {
-    x: [0, -6, 6, -6, 6, 0],
+    x: [0, -6, 6, -3, 3, 0],
     scale: [1, 1.02, 0.98, 1.01, 1],
-    boxShadow: [
-      '0 0 0 rgba(0,0,0,0)',
-      '0 8px 30px rgba(239,68,68,0.12)',
-      '0 0 0 rgba(0,0,0,0)',
-    ],
-    transition: { duration: 0.9, repeat: 1 },
+    transition: { duration: 0.7, repeat: 1 },
   },
 };
 
@@ -26,7 +21,7 @@ export const containerVariant = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.2,
+      staggerChildren: 0.08,
     },
   },
 };
