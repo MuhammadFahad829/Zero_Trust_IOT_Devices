@@ -12,7 +12,7 @@ Files changed (high level)
 - `backend/enforcement.py`: added ZT_QUARANTINE IPv4/IPv6 resolver blocks and dry-run simulation support.
 - `backend/main.py`: added `/enforcer/dryrun` GET/POST endpoints and audit logging for toggles.
 - `frontend/src/components/AdminPanel.jsx`: fetch dry-run state, toggle with confirmation, require `PROVISION_TOKEN` for changes.
-- `scripts/quarantine_smoke_test.sh`: fixed to be non-interactive and tolerant when not root.
+- `infra/scripts/quarantine_smoke_test.sh`: fixed to be non-interactive and tolerant when not root.
 - Misc: `.gitignore` updates, PR assets, and removal of backup files.
 
 How to test (recommended)
@@ -29,7 +29,7 @@ How to test (recommended)
 
 4. Run the smoke-test (optional, non-destructive with dry-run enabled):
 
-   ./scripts/quarantine_smoke_test.sh 10.0.0.5
+   ./infra/scripts/quarantine_smoke_test.sh 10.0.0.5
 
 Notes
 

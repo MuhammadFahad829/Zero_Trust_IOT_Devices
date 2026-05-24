@@ -37,13 +37,13 @@ PROVISION=${PROVISION:-0} # set PROVISION=1 to apply VLAN/DNS provisioning
 APPLY_DNS=${APPLY_DNS:-0} # set APPLY_DNS=1 to copy dnsmasq confs to /etc/dnsmasq.d
 
 # Optional: run create_vlans and dnsmasq generation before starting services
-if [ "${PROVISION}" = "1" ]; then
+  if [ "${PROVISION}" = "1" ]; then
   log "Running VLAN/DNS provisioning (preview+apply)..."
-  if [ -x "${ROOT_DIR}/scripts/create_vlans.sh" ]; then
-    "${ROOT_DIR}/scripts/create_vlans.sh" "${ROOT_DIR}/backend/policies.json" --apply || true
+  if [ -x "${ROOT_DIR}/infra/scripts/create_vlans.sh" ]; then
+    "${ROOT_DIR}/infra/scripts/create_vlans.sh" "${ROOT_DIR}/backend/policies.json" --apply || true
   fi
-  if [ -x "${ROOT_DIR}/scripts/generate_dnsmasq_conf.sh" ]; then
-    "${ROOT_DIR}/scripts/generate_dnsmasq_conf.sh" "${ROOT_DIR}/backend/policies.json" "${ROOT_DIR}/deploy/dnsmasq" || true
+  if [ -x "${ROOT_DIR}/infra/scripts/generate_dnsmasq_conf.sh" ]; then
+    "${ROOT_DIR}/infra/scripts/generate_dnsmasq_conf.sh" "${ROOT_DIR}/backend/policies.json" "${ROOT_DIR}/deploy/dnsmasq" || true
     if [ "${APPLY_DNS}" = "1" ]; then
       log "Copying generated dnsmasq configs to /etc/dnsmasq.d (requires sudo)"
       sudo cp "${ROOT_DIR}/deploy/dnsmasq"/*.conf /etc/dnsmasq.d/ || true

@@ -844,7 +844,7 @@ async def startup_tasks():
         """Run system provisioning steps synchronously. Returns result dict."""
         root = os.path.dirname(__file__)
         repo_root = os.path.abspath(os.path.join(root, '..'))
-        scripts_dir = os.path.join(repo_root, 'scripts')
+        scripts_dir = os.path.join(repo_root, 'infra', 'scripts')
         policies = os.path.join(root, 'policies.json')
         # support optional filtered segments passed via env var PROVISION_SEGMENTS (json list)
         # or via temporary policies file if provided in caller (passed via os.environ)
@@ -977,7 +977,7 @@ async def startup_tasks():
         temp_path = None
         root = os.path.dirname(__file__)
         repo_root = os.path.abspath(os.path.join(root, '..'))
-        scripts_dir = os.path.join(repo_root, 'scripts')
+        scripts_dir = os.path.join(repo_root, 'infra', 'scripts')
         policies = os.path.join(root, 'policies.json')
 
         try:
