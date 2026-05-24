@@ -1,7 +1,7 @@
 """Profiling harness to simulate traffic and collect cProfile stats.
 
 Usage:
-  python3 backend/profile_harness.py --duration 10 --clients 50 --rate 100
+  python3 tools/profile_harness.py --duration 10 --clients 50 --rate 100
 
 Generates `profile_stats.prof` in the repo root.
 """
