@@ -1,6 +1,6 @@
 import time
 
-import database
+from backend import database
 
 
 def test_mark_all_devices_seen_updates_last_seen(tmp_path, monkeypatch):

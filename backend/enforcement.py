@@ -3,7 +3,7 @@ import shlex
 import json
 from pathlib import Path
 from typing import Dict, Optional
-import database
+from backend import database
 
 
 class EnforcementEngine:
@@ -32,7 +32,7 @@ class EnforcementEngine:
             print(f"[DRY_RUN] would run: {command}")
             return True
         try:
-            result = subprocess.run(shlex.split(command), check=True, capture_output=True)
+            subprocess.run(shlex.split(command), check=True, capture_output=True)
             return True
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode().strip() if e.stderr else str(e)
@@ -78,9 +78,9 @@ class EnforcementEngine:
             pass
 
         # Set default FORWARD policy to DROP (idempotent)
-        if not self._check_cmd(f"sudo iptables -P FORWARD DROP"):
+        if not self._check_cmd("sudo iptables -P FORWARD DROP"):
             # try to set it anyway (will print on failure)
-            if not self._run_cmd(f"sudo iptables -P FORWARD DROP"):
+            if not self._run_cmd("sudo iptables -P FORWARD DROP"):
                 return False
 
         # Ensure established/related forwarding allowed (idempotent insert via -C check)
@@ -101,9 +101,9 @@ class EnforcementEngine:
             # delete all and ensure exactly one remains to avoid NAT processing overhead.
             try:
                 out = subprocess.run(["iptables", "-t", "nat", "-S", "POSTROUTING"], check=True, capture_output=True, text=True)
-                lines = [l.strip() for l in out.stdout.splitlines()]
+                lines = [line.strip() for line in out.stdout.splitlines()]
                 match = f"-A POSTROUTING -o {self.wan} -j MASQUERADE"
-                matches = [l for l in lines if l == match]
+                matches = [line for line in lines if line == match]
                 if len(matches) > 1:
                     # delete all matching rules first
                     for _ in range(len(matches)):

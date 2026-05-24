@@ -1,7 +1,7 @@
 """Profiling harness to simulate traffic and collect cProfile stats.
 
 Usage:
-  python3 backend/profile_harness.py --duration 10 --clients 50 --rate 100
+  python3 tools/profile_harness.py --duration 10 --clients 50 --rate 100
 
 Generates `profile_stats.prof` in the repo root.
 """
@@ -12,7 +12,7 @@ import random
 import time
 import os
 
-from monitor import TrafficMonitor
+from backend.monitor import TrafficMonitor
 
 
 def simulate_monitor(duration: int = 10, clients: int = 20, rate: int = 50):

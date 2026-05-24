@@ -13,7 +13,7 @@ Start backend (run from repo root):
 ```bash
 sudo ./run-backend.sh
 sleep 2
-tail -n 200 /tmp/zerotrust-backend.log
+tail -n 200 logs/zerotrust-backend.log
 ```
 
 Verify services and APIs:

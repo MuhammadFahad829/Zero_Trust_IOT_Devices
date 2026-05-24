@@ -7,7 +7,7 @@ Zero-Trust IoT gateway with a React dashboard, FastAPI backend, and network prov
 The easiest local path is the bundled runner from the repository root:
 
 ```bash
-./run-all.sh
+./run.sh
 ```
 
 That script will:
@@ -36,6 +36,42 @@ npm install
 npm start
 ```
 
+## Linting & Tests
+
+Run Python linters and tests:
+
+```bash
+source .venv/bin/activate
+pip install ruff flake8 pytest
+ruff . || flake8 .
+pytest -q
+```
+
+Run frontend linters and tests:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm test
+```
+
+Run Playwright E2E locally (after building frontend):
+
+```bash
+cd frontend
+npm ci
+npm run build
+npx playwright install
+npx playwright test --config=../ci/playwright.config.js
+```
+
+Release helper:
+
+```bash
+./scripts/release.sh
+```
+
 ## Deployment Notes
 
 - Root privileges are required for `scapy`, `iptables`, and VLAN provisioning.
@@ -46,8 +82,8 @@ npm start
 
 ## Service Files
 
--- `infra/deploy/zerotrust-exporter.service` runs the Prometheus exporter.
--- `infra/deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
+- `infra/deploy/zerotrust-exporter.service` runs the Prometheus exporter.
+- `infra/deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
 
 ## Useful Commands
 
@@ -57,6 +93,7 @@ sudo CLEAN_START=true ./run-backend.sh
 curl http://127.0.0.1:8000/devices
 curl http://127.0.0.1:8000/traffic
 curl http://127.0.0.1:8001/metrics
+tail -n 200 logs/zerotrust-backend.log
 ```
 
 The full saved command list is available in `docs/commands.md`.

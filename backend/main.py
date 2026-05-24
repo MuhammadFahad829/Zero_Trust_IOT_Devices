@@ -5,6 +5,7 @@ import math
 import os
 import subprocess
 import sys
+import threading
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
 from pathlib import Path
@@ -15,10 +16,10 @@ BASE_DIR = os.path.dirname(__file__)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from enforcement import EnforcementEngine
-from orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
-from monitor import TrafficMonitor
-import database
+from backend.enforcement import EnforcementEngine
+from backend.orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
+from backend.monitor import TrafficMonitor
+from backend import database
 import time
 from typing import Optional
 
@@ -120,8 +121,8 @@ def _detect_hotspot_interface() -> str:
     # 2) Fallback: pick an interface with a private IP address likely used by hotspots
     try:
         result = subprocess.run(["ip", "-4", "-o", "addr", "show"], check=True, capture_output=True, text=True)
-        for l in result.stdout.splitlines():
-            parts = l.split()
+        for line in result.stdout.splitlines():
+            parts = line.split()
             if len(parts) >= 4:
                 iface = parts[1]
                 addr = parts[3]
@@ -450,7 +451,7 @@ async def _enforcement_loop():
                         ENFORCED_BLOCKS[ip] = row.get('status') or 'Blocked'
                         enforcer.block_device(ip, segment=seg)
                         database.add_or_update_device(ip, row.get('mac', ''), time.time(), vendor=row.get('vendor'), device_type=row.get('device_type'), status='Quarantined', mb_limit=row.get('mb_limit', 100.0), segment=seg)
-                        database.add_log('AUTO_BLOCK', ip=ip, detail=f'auto-blocked (offline)')
+                        database.add_log('AUTO_BLOCK', ip=ip, detail='auto-blocked (offline)')
                         try:
                             await manager.broadcast({'event': 'STATUS_UPDATE', 'ip': ip, 'status': 'Quarantined'})
                         except Exception:
@@ -649,7 +650,6 @@ def on_anomaly_detected(ip: str):
         pass
 
 # Monitor Start (Limit set to 50MB for testing)
-import threading
 monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
 threading.Thread(target=monitor.start_monitoring, daemon=True).start()
 
@@ -844,7 +844,7 @@ async def startup_tasks():
         """Run system provisioning steps synchronously. Returns result dict."""
         root = os.path.dirname(__file__)
         repo_root = os.path.abspath(os.path.join(root, '..'))
-        scripts_dir = os.path.join(repo_root, 'scripts')
+        scripts_dir = os.path.join(repo_root, 'infra', 'scripts')
         policies = os.path.join(root, 'policies.json')
         # support optional filtered segments passed via env var PROVISION_SEGMENTS (json list)
         # or via temporary policies file if provided in caller (passed via os.environ)
@@ -977,7 +977,7 @@ async def startup_tasks():
         temp_path = None
         root = os.path.dirname(__file__)
         repo_root = os.path.abspath(os.path.join(root, '..'))
-        scripts_dir = os.path.join(repo_root, 'scripts')
+        scripts_dir = os.path.join(repo_root, 'infra', 'scripts')
         policies = os.path.join(root, 'policies.json')
 
         try:

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import { Monitor, Smartphone, ShieldAlert, CheckCircle, Cpu, Camera, Router, Gauge, Save, ChevronDown, ChevronUp } from 'lucide-react';
-const TrafficChart = lazy(() => import('./TrafficChart'));
 import { formatBytes } from '../utils/format';
 import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '../utils/deviceIdentity';
+
+const TrafficChart = lazy(() => import('./TrafficChart'));
 
 const getCategoryIcon = (category) => {
   switch (category) {

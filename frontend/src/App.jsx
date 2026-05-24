@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, ShieldAlert, ShieldCheck, Menu, Filter, Layers, CheckCircle, ArrowUpRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -7,12 +7,12 @@ import AuditLogsTable from './components/AuditLogsTable';
 import HotspotBanner from './components/HotspotBanner';
 import TopDevices from './components/TopDevices';
 import Segmentation from './components/Segmentation';
+import { containerVariant } from './utils/animations';
+import { inferCategory, getDisplayName } from './utils/deviceIdentity';
 
 const ThreatVault = lazy(() => import('./components/ThreatVault'));
 const NetworkTopology = lazy(() => import('./components/NetworkTopology'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
-import { containerVariant } from './utils/animations';
-import { inferCategory, getDisplayName } from './utils/deviceIdentity';
 
 const App = () => {
   const [devices, setDevices] = useState([]);
@@ -21,7 +21,7 @@ const App = () => {
   const [totalBandwidth, setTotalBandwidth] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [hotspotActive, setHotspotActive] = useState(true);
-  const [devMode, setDevMode] = useState(() => {
+  const [devMode] = useState(() => {
     try {
       return localStorage.getItem('devHotspot') === '1';
     } catch (e) {
@@ -34,7 +34,7 @@ const App = () => {
   const [availableSegments, setAvailableSegments] = useState([]);
   const [viewMode, setViewMode] = useState('professional');
 
-  const fetchMode = async () => {
+  const fetchMode = useCallback(async () => {
     try {
       const res = await fetch('http://localhost:8000/mode');
       const data = await res.json();
@@ -45,7 +45,7 @@ const App = () => {
     } catch (err) {
       // keep last known state on error
     }
-  };
+  }, [devMode]);
 
   // persist dev mode and ensure hotspotActive reflects it immediately
   useEffect(() => {
@@ -182,7 +182,7 @@ const App = () => {
       window.removeEventListener('refresh:mode', onRefresh);
       window.removeEventListener('navigate:devices', onNavigateDevices);
     };
-  }, []);
+  }, [fetchMode]);
 
   useEffect(() => {
     const fetchTraffic = async () => {
@@ -357,8 +357,8 @@ const App = () => {
       <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 main-content">
         <div className="mb-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg sm:text-xl font-bold text-white">ZeroTrust IoT Gateway</h1>
-            <span className="text-sm text-gray-400 hidden sm:inline">Network Control Center</span>
+            <h1 className="text-lg sm:text-xl font-extrabold tracking-[-0.02em] text-white whitespace-nowrap">ZeroTrust IoT Gateway</h1>
+            <span className="text-xs sm:text-sm text-gray-400 hidden sm:inline whitespace-nowrap">Network Control Center</span>
           </div>
         </div>
         <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mb-4 md:mb-8">
@@ -377,10 +377,12 @@ const App = () => {
                 type="button"
                 onClick={() => hotspotActive && setActiveTab('devices')}
                 disabled={!hotspotActive}
-                title={hotspotActive ? 'View all devices' : 'Connect hotspot to view all devices'}
-                className={`btn btn-ghost px-4 py-2 text-sm ${!hotspotActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                aria-label={hotspotActive ? 'Open devices tab' : 'Connect hotspot to open devices tab'}
+                title={hotspotActive ? 'Open devices tab' : 'Connect hotspot to open devices tab'}
+                className={`btn btn-ghost px-3 py-2 text-sm inline-flex items-center ${!hotspotActive ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                View all devices
+                <ArrowUpRight size={16} />
+                <span className="sr-only">Open devices tab</span>
               </button>
             </div>
 
@@ -420,9 +422,9 @@ const App = () => {
 
         {activeTab === 'dashboard' && (
           <div>
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold text-white mb-2">Security Dashboard</h1>
-              <p className="text-gray-400">Real-time monitoring of connected IoT devices and threat status</p>
+            <div className="mb-6 sm:mb-8">
+              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Security Dashboard</h1>
+              <p className="text-gray-400 max-w-2xl">Real-time monitoring of connected IoT devices and threat status</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

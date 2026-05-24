@@ -18,8 +18,8 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from orchestrator import _detect_device_type, _lookup_oui  # noqa: E402
-from database import suggest_segment_for_device  # noqa: E402
+from backend.orchestrator import _detect_device_type, _lookup_oui  # noqa: E402
+from backend.database import suggest_segment_for_device  # noqa: E402
 
 
 def load_samples(path: Path):

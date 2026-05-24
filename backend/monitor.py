@@ -13,10 +13,9 @@ except Exception:
         pass
 
     IP = _DummyIP
-import database
-import telemetry
-import time
-from functools import wraps
+
+from backend import database
+from backend import telemetry
 
 
 class TrafficMonitor:

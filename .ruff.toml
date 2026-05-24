@@ -1,0 +1,5 @@
+line-length = 88
+exclude = [".venv", "frontend", "node_modules", "build", "dist"]
+
+[lint]
+ignore = ["E402", "E501", "W293", "W391", "W292", "E302", "E303", "E305", "E741", "F541", "F841", "F811"]

@@ -56,3 +56,4 @@ secrets.yml
 # Backup and local DB
 *.bak
 backend/zerotrust.db
+*.db-journal

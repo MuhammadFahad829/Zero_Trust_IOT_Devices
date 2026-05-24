@@ -14,4 +14,4 @@ echo 'Checking that DHCP (dnsmasq) socket is bound (UDP 67)'
 sudo ss -lunp | egrep ':67|:68' || echo 'DHCP not listening'
 
 echo
-echo 'Run scripts/verify_iptables.sh to inspect iptables rules'
+echo 'Run infra/scripts/verify_iptables.sh to inspect iptables rules'

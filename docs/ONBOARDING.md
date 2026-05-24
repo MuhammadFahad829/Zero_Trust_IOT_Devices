@@ -3,6 +3,7 @@
 This document describes local development, provisioning, segmentation macros, VLAN provisioning, and rollback steps.
 
 ## Run locally (dev)
+
 - Create and activate Python venv:
 
 ```bash
@@ -38,6 +39,7 @@ npx serve -s frontend/build -l 3000
 ```
 
 ## Segmentation macros (batch assignment)
+
 - Macros provide quick segment presets for common groups. Suggested macros:
   - `iot` -> VLAN 100, low bandwidth, quarantined-by-default
   - `guest` -> VLAN 200, limited access
@@ -47,6 +49,7 @@ npx serve -s frontend/build -l 3000
 - Backend source of truth: `backend/policies.json` — update `segments` entries to add/remove macros.
 
 ## VLAN provisioning (scripts/create_vlans.sh)
+
 - Dry-run (safe): prints commands without applying changes
 
 ```bash
@@ -66,10 +69,12 @@ sudo ./scripts/create_vlans.sh [path/to/policies.json] --apply
   - `RTNETLINK answers: File exists` → interface or bridge already exists; consider cleaning previous resources first.
 
 ## Safe cleanup (reversible)
+
 - We move large artifacts to `./trash/removed_YYYYMMDD_HHMMSS/` instead of deleting.
 - Restore by moving contents back to original locations.
 
 ## Rollback / revert
+
 - Policies backup: the script and edits should be backed up. Example restore:
 
 ```bash
@@ -86,6 +91,7 @@ sudo ip link delete br-iot type bridge || true
 ```
 
 ## Tests
+
 - Backend tests:
 
 ```bash
@@ -95,6 +101,7 @@ PYTHONPATH=./backend .venv/bin/python -m pytest backend/tests -q
 - Integration: see `tests/integration/run_integration_tests.sh`.
 
 ## Notes
+
 - Keep runtime artifacts out of Git using `.gitignore` (node_modules, frontend/build, .venv).
 - Use `docs/PROJECT_STRUCTURE.md` and `docs/ONBOARDING.md` for operational guidance.
 
