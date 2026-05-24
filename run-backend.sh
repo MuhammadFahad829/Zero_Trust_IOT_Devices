@@ -4,8 +4,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="$ROOT/.venv"
 PYTHON="$VENV/bin/python"
 PIDFILE="/tmp/zerotrust-backend.pid"
-LOGFILE="/tmp/zerotrust-backend.log"
-EXPORTER_LOG="/tmp/zerotrust-exporter.log"
+LOG_DIR="$ROOT/logs"
+LOGFILE="$LOG_DIR/zerotrust-backend.log"
+EXPORTER_LOG="$LOG_DIR/zerotrust-exporter.log"
 EXPORTER_PIDFILE="/tmp/zerotrust-exporter.pid"
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -19,6 +20,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 cd "$ROOT"
+mkdir -p "$LOG_DIR"
 
 if [[ -f "$PIDFILE" ]]; then
   oldpid="$(<"$PIDFILE")"

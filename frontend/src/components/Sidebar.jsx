@@ -54,8 +54,8 @@ const Sidebar = ({
           <ShieldCheck size={28} />
         </div>
         <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight leading-tight max-w-[11rem] sm:max-w-none">ZeroTrust IoT Gateway</h2>
-          <span className="block text-[11px] sm:text-xs text-gray-500 tracking-wide mt-1">Network Control Center</span>
+          <h2 className="text-[15px] sm:text-xl font-extrabold tracking-[-0.02em] leading-tight text-white whitespace-nowrap">ZeroTrust IoT Gateway</h2>
+          <span className="block text-[11px] sm:text-xs text-gray-500 tracking-wide mt-1 whitespace-nowrap">Network Control Center</span>
         </div>
       </div>
 

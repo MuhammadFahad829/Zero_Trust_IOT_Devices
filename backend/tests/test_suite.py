@@ -5,9 +5,9 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
-import database
+from backend import database
 from backend.enforcement import EnforcementEngine
-from monitor import TrafficMonitor
+from backend.monitor import TrafficMonitor
 
 
 class BackendTestSuite(unittest.TestCase):

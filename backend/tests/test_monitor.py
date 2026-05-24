@@ -1,6 +1,6 @@
 import time
 
-from monitor import TrafficMonitor
+from backend.monitor import TrafficMonitor
 
 
 def test_inject_sample_updates_device_snapshot():

@@ -3,7 +3,7 @@ import shlex
 import json
 from pathlib import Path
 from typing import Dict, Optional
-import database
+from backend import database
 
 
 class EnforcementEngine:

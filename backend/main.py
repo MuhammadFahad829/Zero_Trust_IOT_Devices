@@ -16,10 +16,10 @@ BASE_DIR = os.path.dirname(__file__)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from enforcement import EnforcementEngine
-from orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
-from monitor import TrafficMonitor
-import database
+from backend.enforcement import EnforcementEngine
+from backend.orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
+from backend.monitor import TrafficMonitor
+from backend import database
 import time
 from typing import Optional
 

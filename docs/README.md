@@ -7,7 +7,7 @@ Zero-Trust IoT gateway with a React dashboard, FastAPI backend, and network prov
 The easiest local path is the bundled runner from the repository root:
 
 ```bash
-./run-all.sh
+./run.sh
 ```
 
 That script will:
@@ -72,7 +72,6 @@ Release helper:
 ./scripts/release.sh
 ```
 
-
 ## Deployment Notes
 
 - Root privileges are required for `scapy`, `iptables`, and VLAN provisioning.
@@ -83,8 +82,8 @@ Release helper:
 
 ## Service Files
 
--- `infra/deploy/zerotrust-exporter.service` runs the Prometheus exporter.
--- `infra/deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
+- `infra/deploy/zerotrust-exporter.service` runs the Prometheus exporter.
+- `infra/deploy/zerotrust-vlans.service` provisions VLAN and dnsmasq configuration.
 
 ## Useful Commands
 
@@ -94,6 +93,7 @@ sudo CLEAN_START=true ./run-backend.sh
 curl http://127.0.0.1:8000/devices
 curl http://127.0.0.1:8000/traffic
 curl http://127.0.0.1:8001/metrics
+tail -n 200 logs/zerotrust-backend.log
 ```
 
 The full saved command list is available in `docs/commands.md`.

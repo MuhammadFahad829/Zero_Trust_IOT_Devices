@@ -12,7 +12,7 @@ import random
 import time
 import os
 
-from monitor import TrafficMonitor
+from backend.monitor import TrafficMonitor
 
 
 def simulate_monitor(duration: int = 10, clients: int = 20, rate: int = 50):

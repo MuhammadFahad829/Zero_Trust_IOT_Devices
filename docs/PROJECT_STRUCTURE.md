@@ -29,13 +29,18 @@ This document describes the recommended folder and file layout for the project a
       - utils/ — frontend helpers
     - public/
     - build/ — generated production build (remove from repo)
+  - run.sh — main full-stack launcher
+  - run-backend.sh — backend launcher with logging and exporter startup
+  - stop-backend.sh — stop helper for the backend PID file
+  - scripts/
+    - release.sh
+    - start-backend.sh
+    - start-frontend-dev.sh
+  - logs/ — runtime log output (ignored, keep a .gitkeep if you want the folder tracked)
   - infra/
     - scripts/
       - create_vlans.sh
       - generate_dnsmasq_conf.sh
-      - run_all.sh
-      - run-backend.sh
-      - stop-backend.sh
       - verify_iptables.sh
       - assert_iptables.sh
   - tests/
@@ -53,20 +58,21 @@ This document describes the recommended folder and file layout for the project a
       - dnsmasq/ — generated DNS configs
   - docs/
     - PROJECT_STRUCTURE.md (this file)
+    - CHANGELOG.md
+    - RUN.md
+    - RUNBOOK.md
     - README.md
-    - ARCHITECTURE.md
     - ONBOARDING.md
   - .github/
+    - pull_request_template.md
     - workflows/
       - ci.yml
   - trash/ — reversible moves of large artifacts (node_modules/build)
   - .venv/ — local environment (exclude from VCS)
-  - README.md
-  - LICENSE
 
 Notes and recommendations
 
-- Do NOT commit runtime artifacts to git: add `node_modules/`, `frontend/build/`, and `.venv/` to `.gitignore`.
+- Do NOT commit runtime artifacts to git: add `node_modules/`, `frontend/build/`, `logs/*.log`, and `.venv/` to `.gitignore`.
 - `backend/policies.json` is the single source of truth for segments/VLANs; scripts read it for provisioning.
 - Keep `scripts/` small and well documented; prefer dry-run behavior by default and `--apply` for live changes.
 - For local development, run backend as non-root where possible; grant capabilities to the venv Python binary if packet capture is required:

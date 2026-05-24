@@ -13,8 +13,9 @@ except Exception:
         pass
 
     IP = _DummyIP
-import database
-import telemetry
+
+from backend import database
+from backend import telemetry
 
 
 class TrafficMonitor:
