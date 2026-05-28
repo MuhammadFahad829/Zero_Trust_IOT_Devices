@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Request, Response
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -1403,7 +1403,45 @@ async def set_device_segment(ip: str, segment: str):
 
 
 @app.get('/devices')
-def api_list_devices():
+def api_list_devices(request: Request, response: Response):
+    """Return list of devices. This endpoint is deprecated for heavy polling; a rate-limiter
+    and deprecation headers are provided to guide clients toward websocket deltas.
+    """
+    # Rate limiting (per-client IP)
+    client_ip = request.client.host if request.client else 'unknown'
+    try:
+        limit = int(os.environ.get('DEVICES_RATE_LIMIT', '2'))
+    except Exception:
+        limit = 2
+    try:
+        window = int(os.environ.get('DEVICES_RATE_WINDOW_SEC', '10'))
+    except Exception:
+        window = 10
+
+    # in-memory rate map: ip -> [timestamps]
+    if not hasattr(api_list_devices, '_rate_map'):
+        api_list_devices._rate_map = {}
+
+    now_ts = time.time()
+    entries = api_list_devices._rate_map.get(client_ip, [])
+    # drop timestamps older than window
+    entries = [t for t in entries if now_ts - t < window]
+    remaining = max(0, limit - len(entries))
+    # set deprecation header for all responses
+    response.headers['X-Deprecated'] = 'true'
+    response.headers['Warning'] = '199 - "Deprecated endpoint: use WebSocket deltas instead"'
+    response.headers['X-RateLimit-Limit'] = str(limit)
+    response.headers['X-RateLimit-Remaining'] = str(remaining)
+
+    if remaining <= 0:
+        # rate limited
+        retry_after = int(window - (now_ts - entries[0]) if entries else window)
+        response.headers['Retry-After'] = str(retry_after)
+        return Response(content=json.dumps({'error': 'rate_limited', 'retry_after': retry_after}), status_code=429, media_type='application/json')
+
+    # record this request
+    entries.append(now_ts)
+    api_list_devices._rate_map[client_ip] = entries
     device_rows = database.list_devices()
     devices = []
     for row in device_rows:

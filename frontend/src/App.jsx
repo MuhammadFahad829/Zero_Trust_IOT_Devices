@@ -212,6 +212,11 @@ const App = () => {
     const fetchDevices = async () => {
       try {
         const res = await fetch('http://localhost:8000/devices');
+        if (!res.ok) {
+          // If the endpoint is rate-limited or deprecated, skip seeding from REST
+          console.warn('devices endpoint returned non-OK:', res.status);
+          return;
+        }
         const data = await res.json();
         const deviceList = Array.isArray(data.devices) ? data.devices : [];
         setDevices((prev) => {
