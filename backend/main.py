@@ -27,6 +27,8 @@ from typing import Optional
 app = FastAPI(title="ZeroTrust IoT Gateway")
 
 LAN_INTERFACE = os.environ.get("LAN_INTERFACE", "wlp2s0")
+# Test/CI flag to avoid starting packet-sniffing or raw-socket monitor threads during tests
+ZT_DISABLE_MONITOR = os.environ.get('ZT_DISABLE_MONITOR', '0').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def _detect_default_wan_interface() -> str:
@@ -435,8 +437,13 @@ except RuntimeError:
     asyncio.set_event_loop(loop)
 
 # Scout Start
-scout = NetworkOrchestrator(interface=LAN_INTERFACE, callback=on_device_discovered)
-scout.start_sniffing()
+scout = None
+if not ZT_DISABLE_MONITOR:
+    scout = NetworkOrchestrator(interface=LAN_INTERFACE, callback=on_device_discovered)
+    try:
+        scout.start_sniffing()
+    except Exception:
+        pass
 
 # Cursor for deterministic round-robin probing across LAN hosts.
 PROBE_CURSOR = 0
@@ -699,8 +706,11 @@ def seed_devices_from_database():
         ip = row.get("ip")
         if not ip:
             continue
-
-        scout.discovered_ips.add(ip)
+        if scout is not None:
+            try:
+                scout.discovered_ips.add(ip)
+            except Exception:
+                pass
         payload = {
             "event": "NEW_DEVICE",
             "data": {
@@ -726,7 +736,11 @@ def seed_devices_from_database():
     print(f"[*] Demo database mode seeded {len(rows)} device(s) from SQLite")
 
 
-seed_connected_devices_from_neighbors()
+if not ZT_DISABLE_MONITOR:
+    seed_connected_devices_from_neighbors()
+else:
+    # When monitor/scanning is disabled (tests/CI), still seed devices from DB for UI
+    pass
 seed_devices_from_database()
 
 # --- Anomaly Alert Callback ---
@@ -764,14 +778,16 @@ def on_anomaly_detected(ip: str):
         pass
 
 # Monitor Start (Limit set to 50MB for testing)
-monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
-threading.Thread(target=monitor.start_monitoring, daemon=True).start()
+monitor = None
+if not ZT_DISABLE_MONITOR:
+    monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
+    threading.Thread(target=monitor.start_monitoring, daemon=True).start()
 
-# Prime demo traffic after monitor is available
-try:
-    _prime_demo_traffic_from_database()
-except Exception:
-    pass
+    # Prime demo traffic after monitor is available
+    try:
+        _prime_demo_traffic_from_database()
+    except Exception:
+        pass
 
 
 def _find_ip_for_mac(mac: str) -> str:
@@ -853,6 +869,7 @@ async def _station_poller_loop():
         await asyncio.sleep(3)
 
 
+
 def _refresh_hotspot_state() -> None:
     global LAN_INTERFACE_MODE, HOTSPOT_ACTIVE, LAN_NETWORK, PREV_HOTSPOT_ACTIVE
     prev = HOTSPOT_ACTIVE
@@ -894,16 +911,27 @@ async def traffic_broadcast_loop():
             pass
 
         try:
-            _advance_demo_traffic_from_database()
+            if not ZT_DISABLE_MONITOR:
+                _advance_demo_traffic_from_database()
+            else:
+                # Disabled monitor: skip advancing demo traffic
+                pass
         except Exception:
             pass
 
         try:
-            await asyncio.to_thread(seed_connected_devices_from_neighbors)
+            if not ZT_DISABLE_MONITOR:
+                await asyncio.to_thread(seed_connected_devices_from_neighbors)
         except Exception:
             pass
 
-        mbps = monitor.get_current_mbps()
+        if monitor is not None:
+            try:
+                mbps = monitor.get_current_mbps()
+            except Exception:
+                mbps = 0.0
+        else:
+            mbps = 0.0
         await manager.broadcast(
             {
                 "event": "TRAFFIC_UPDATE",
@@ -921,8 +949,8 @@ async def traffic_broadcast_loop():
                 ip = d.get("ip")
                 if not ip:
                     continue
-                snap = monitor.get_device_snapshot(ip)
-                try:
+                if monitor is not None:
+                    snap = monitor.get_device_snapshot(ip)
                     per[ip] = {
                         "display_name": compute_display_name(d),
                         "mbps": snap.get("mbps", 0.0),
@@ -930,12 +958,14 @@ async def traffic_broadcast_loop():
                         "total_bytes": snap.get("total_bytes", 0),
                         "history": snap.get("history", []),
                     }
-                except Exception:
+                else:
+                    # Monitor disabled: provide zeroed snapshot using DB info
                     per[ip] = {
-                        "mbps": snap.get("mbps", 0.0),
-                        "total_mb": snap.get("total_mb", 0.0),
-                        "total_bytes": snap.get("total_bytes", 0),
-                        "history": snap.get("history", []),
+                        "display_name": compute_display_name(d),
+                        "mbps": 0.0,
+                        "total_mb": 0.0,
+                        "total_bytes": 0,
+                        "history": [],
                     }
             # build delta payload: include only devices with meaningful changes
             diffs = {}
@@ -1010,12 +1040,25 @@ async def traffic_broadcast_loop():
 
 @app.on_event("startup")
 async def startup_tasks():
-    asyncio.create_task(traffic_broadcast_loop())
-    # Start station poller to detect associated stations from the wireless driver
-    try:
-        asyncio.create_task(_station_poller_loop())
-    except Exception:
-        pass
+    # Start traffic broadcast loop unless monitor is disabled for tests
+    if not ZT_DISABLE_MONITOR:
+        try:
+            asyncio.create_task(traffic_broadcast_loop())
+        except Exception:
+            pass
+
+        # Start station poller to detect associated stations from the wireless driver
+        try:
+            asyncio.create_task(_station_poller_loop())
+        except Exception:
+            pass
+    else:
+        # In test/CI mode we avoid starting monitor/scanner threads; run a minimal no-op loop if required
+        try:
+            # still start a lightweight broadcast loop that emits traffic=0 occasionally for UI
+            asyncio.create_task(traffic_broadcast_loop())
+        except Exception:
+            pass
 
     # Start optional Prometheus metrics exporter if available
     try:
