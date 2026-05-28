@@ -20,6 +20,7 @@ from backend.enforcement import EnforcementEngine
 from backend.orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
 from backend.monitor import TrafficMonitor
 from backend import database
+from backend.identity import compute_display_name
 import time
 from typing import Optional
 
@@ -229,6 +230,14 @@ def _device_segment_for_ip(ip: str) -> str:
     return ""
 
 
+def _display_for_ip(ip: str) -> str:
+    try:
+        row = database.get_device(ip) or next((r for r in database.list_devices() if r.get('ip') == ip), None)
+        return compute_display_name(row) if row else 'Unknown Device'
+    except Exception:
+        return 'Unknown Device'
+
+
 def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_type: str = None, online: bool = True):
     now = time.time()
     current = database.get_device(ip) or {}
@@ -264,6 +273,11 @@ def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_typ
             "segment": segment,
         },
     }
+    try:
+        # include server-computed canonical display name
+        payload['data']['display_name'] = compute_display_name(current if current else {"ip": ip, "mac": mac, "vendor": vendor, "device_type": device_type})
+    except Exception:
+        pass
 
     try:
         asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
@@ -429,6 +443,9 @@ PROBE_CURSOR = 0
 
 # In-memory map for auto-enforced blocks: ip -> previous_status
 ENFORCED_BLOCKS = {}
+
+# previous per-device snapshot for delta broadcasts
+PREV_DEVICE_SNAPSHOT = {}
 
 
 async def _enforcement_loop():
@@ -609,6 +626,10 @@ def seed_devices_from_database():
             },
         }
         try:
+            payload['data']['display_name'] = compute_display_name(row)
+        except Exception:
+            pass
+        try:
             asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
         except Exception:
             pass
@@ -635,6 +656,10 @@ def on_anomaly_detected(ip: str):
         "message": "Device Quarantined due to high usage",
         "status": "Quarantined",
     }
+    try:
+        payload['display_name'] = _display_for_ip(ip)
+    except Exception:
+        pass
     try:
         asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
     except Exception:
@@ -799,7 +824,7 @@ async def traffic_broadcast_loop():
                 },
             }
         )
-        # Also broadcast per-device snapshots so frontend can show live per-device traffic
+        # Also broadcast per-device snapshots; send only deltas compared to prior snapshot
         try:
             device_rows = database.list_devices()
             per = {}
@@ -808,13 +833,91 @@ async def traffic_broadcast_loop():
                 if not ip:
                     continue
                 snap = monitor.get_device_snapshot(ip)
-                per[ip] = {
-                    "mbps": snap.get("mbps", 0.0),
-                    "total_mb": snap.get("total_mb", 0.0),
-                    "total_bytes": snap.get("total_bytes", 0),
-                    "history": snap.get("history", []),
-                }
-            await manager.broadcast({"event": "DEVICES_TRAFFIC", "data": per})
+                try:
+                    per[ip] = {
+                        "display_name": compute_display_name(d),
+                        "mbps": snap.get("mbps", 0.0),
+                        "total_mb": snap.get("total_mb", 0.0),
+                        "total_bytes": snap.get("total_bytes", 0),
+                        "history": snap.get("history", []),
+                    }
+                except Exception:
+                    per[ip] = {
+                        "mbps": snap.get("mbps", 0.0),
+                        "total_mb": snap.get("total_mb", 0.0),
+                        "total_bytes": snap.get("total_bytes", 0),
+                        "history": snap.get("history", []),
+                    }
+            # build delta payload: include only devices with meaningful changes
+            diffs = {}
+            mbps_delta_threshold = float(os.environ.get("DELTA_Mbps_THRESHOLD", "0.02"))
+            for ip, info in per.items():
+                prev = PREV_DEVICE_SNAPSHOT.get(ip)
+                changed = False
+                if not prev:
+                    changed = True
+                else:
+                    # check mbps delta
+                    if abs(float(info.get("mbps", 0.0)) - float(prev.get("mbps", 0.0))) >= mbps_delta_threshold:
+                        changed = True
+                    # check total_bytes change
+                    if int(info.get("total_bytes", 0)) != int(prev.get("total_bytes", 0)):
+                        changed = True
+                if changed:
+                    diffs[ip] = info
+
+            # update snapshot store
+            PREV_DEVICE_SNAPSHOT.clear()
+            PREV_DEVICE_SNAPSHOT.update(per)
+
+            # Coalescing: when many diffs occur at once, send an aggregated summary
+            try:
+                coalesce_threshold = int(os.environ.get("DELTA_COALESCE_THRESHOLD", "100"))
+            except Exception:
+                coalesce_threshold = 100
+
+            if diffs:
+                if len(diffs) > coalesce_threshold:
+                    # Build aggregated per-segment summary and top-N devices snapshot
+                    per_segment = {}
+                    # map ip -> segment via DB rows (fast lookup)
+                    seg_map = {r.get('ip'): (r.get('segment') or 'unassigned') for r in device_rows}
+                    for ip, info in per.items():
+                        seg = seg_map.get(ip, 'unassigned')
+                        seg_entry = per_segment.setdefault(seg, {'mbps': 0.0, 'count': 0})
+                        seg_entry['mbps'] = seg_entry.get('mbps', 0.0) + float(info.get('mbps', 0.0))
+                        seg_entry['count'] = seg_entry.get('count', 0) + 1
+
+                    # top devices by mbps (limit)
+                    try:
+                        top_n = int(os.environ.get('DELTA_COALESCE_TOP_N', '25'))
+                    except Exception:
+                        top_n = 25
+                    sorted_devices = sorted(per.items(), key=lambda kv: float(kv[1].get('mbps', 0.0)), reverse=True)
+                    top_devices = []
+                    for ip, info in sorted_devices[:top_n]:
+                        top_devices.append({
+                            'ip': ip,
+                            'display_name': info.get('display_name'),
+                            'mbps': info.get('mbps'),
+                            'total_mb': info.get('total_mb'),
+                            'total_bytes': info.get('total_bytes'),
+                        })
+
+                    summary_payload = {
+                        'event': 'DEVICES_TRAFFIC',
+                        'summary': True,
+                        'data': {
+                            'per_segment': per_segment,
+                            'top_devices': top_devices,
+                            'total_mbps': round(float(mbps), 3),
+                            'timestamp': time.time(),
+                        },
+                        'partial': True,
+                    }
+                    await manager.broadcast(summary_payload)
+                else:
+                    await manager.broadcast({'event': 'DEVICES_TRAFFIC', 'data': diffs, 'partial': True})
         except Exception:
             pass
         await asyncio.sleep(2)
@@ -917,13 +1020,7 @@ async def startup_tasks():
         temp_path = None
         if segments and isinstance(segments, (list, tuple)):
             try:
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -982,13 +1079,7 @@ async def startup_tasks():
 
         try:
             if segments and isinstance(segments, (list, tuple)):
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -1028,13 +1119,7 @@ async def startup_tasks():
         temp_path = None
         try:
             if segments and isinstance(segments, (list, tuple)):
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -1106,7 +1191,10 @@ async def allow_access(ip: str):
     segment = _device_segment_for_ip(ip)
     ok = enforcer.allow_device(ip, segment=segment or None)
     status = "Allowed" if ok else "Error"
-    await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
+    try:
+        await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status, "display_name": _display_for_ip(ip)})
+    except Exception:
+        await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
     try:
         existing = next((row for row in database.list_devices() if row["ip"] == ip), None)
         database.add_log("ALLOW", ip=ip, detail=f"status={status}")
@@ -1177,7 +1265,10 @@ async def set_device_segment(ip: str, segment: str):
         except Exception:
             pass
         database.add_log('SET_SEGMENT', ip=ip, detail=str({'segment': normalized or 'Unassigned'}))
-        await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized})
+        try:
+            await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized, 'display_name': _display_for_ip(ip)})
+        except Exception:
+            await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized})
         return {'message': f"set segment={normalized or 'Unassigned'} for {ip}"}
     except Exception as e:
         return {'error': str(e)}
@@ -1190,8 +1281,24 @@ def api_list_devices():
     for row in device_rows:
         live = monitor.get_device_snapshot(row["ip"])
         online = _is_device_online(row.get("last_seen"))
+        # Compute a canonical display_name the frontend can prefer
+        explicit = _get_row_label(row)
+        if explicit:
+            display_name = explicit
+        else:
+            vendor = _clean_text(row.get('vendor'))
+            device_type = _clean_text(row.get('device_type')) or _detect_device_type(vendor, row.get('mac'))
+            suffix = _get_name_suffix(row)
+            if vendor and not _has_private_vendor_hint(vendor):
+                display_name = f"{vendor} {device_type}".strip() + suffix
+            elif device_type:
+                display_name = f"{device_type}".strip() + suffix
+            else:
+                display_name = f"Unknown Device{suffix}".strip()
+
         devices.append({
             **row,
+            "display_name": display_name,
             "online": online,
             "trafficMbps": live.get("mbps", 0.0),
             "trafficBytes": live.get("total_bytes", 0),
@@ -1204,22 +1311,11 @@ def api_list_devices():
 @app.get('/segments')
 def api_list_segments():
     """Return available segmentation policies and assigned segments."""
-    # Load policies.json if present
-    policies = {}
-    try:
-        import json as _json
-        p = Path(__file__).parent / 'policies.json'
-        if p.exists():
-            with p.open() as fh:
-                policies = _json.load(fh)
-    except Exception:
-        policies = {}
-
-    # Collect unique assigned segments from database
-    assigned = sorted({d.get('segment') or '' for d in database.list_devices()})
+    scaffold = enforcer.build_segment_scaffold()
     return {
-        'policies': policies,
-        'assigned_segments': assigned,
+        'policies': enforcer.load_policy_document(),
+        'assigned_segments': scaffold.get('assigned_segments', []),
+        'segment_scaffold': scaffold,
     }
 
 

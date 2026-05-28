@@ -32,7 +32,9 @@ const App = () => {
   const [segmentFilter, setSegmentFilter] = useState('all');
   const [bulkSegment, setBulkSegment] = useState('');
   const [availableSegments, setAvailableSegments] = useState([]);
+  const [segmentScaffold, setSegmentScaffold] = useState(null);
   const [viewMode, setViewMode] = useState('professional');
+  const [trafficSummary, setTrafficSummary] = useState(null);
 
   const fetchMode = useCallback(async () => {
     try {
@@ -94,20 +96,85 @@ const App = () => {
       }
 
       if (msg.event === 'DEVICES_TRAFFIC' && msg.data) {
+        // Support aggregated summary messages when backend coalesces many diffs
+        if (msg.summary) {
+          // keep a small client-side summary and update total if provided
+          setTrafficSummary(msg.data);
+          if (msg.data?.total_mbps !== undefined) setTotalBandwidth(Number(msg.data.total_mbps) || 0);
+
+          // merge top_devices into local devices list where possible
+          if (Array.isArray(msg.data.top_devices) && msg.data.top_devices.length > 0) {
+            setDevices((prev) => {
+              const byIp = new Map(prev.map((p) => [p.ip, p]));
+              for (const td of msg.data.top_devices) {
+                const ip = td.ip;
+                const existing = byIp.get(ip) || {
+                  ip,
+                  status: 'Blocked',
+                  trafficMB: 0,
+                  trafficBytes: 0,
+                  trafficHistory: [],
+                  trafficMbps: 0,
+                };
+                const updated = {
+                  ...existing,
+                  trafficMB: td.total_mb ?? existing.trafficMB,
+                  trafficBytes: td.total_bytes ?? existing.trafficBytes,
+                  trafficHistory: existing.trafficHistory,
+                  trafficMbps: td.mbps ?? existing.trafficMbps,
+                  display_name: td.display_name ?? existing.display_name,
+                };
+                byIp.set(ip, updated);
+              }
+              return Array.from(byIp.values());
+            });
+          }
+
+          return;
+        }
+
         // msg.data: { ip: { mbps, total_mb, total_bytes, history } }
-        setDevices((prev) =>
-          prev.map((d) => {
-            const snap = msg.data[d.ip];
-            if (!snap) return d;
-            return {
-              ...d,
-              trafficMB: snap.total_mb ?? d.trafficMB,
-              trafficBytes: snap.total_bytes ?? d.trafficBytes,
-              trafficHistory: snap.history ?? d.trafficHistory,
-              trafficMbps: snap.mbps ?? d.trafficMbps,
-            };
-          }),
-        );
+        // support partial diffs: backend may send { partial: true, data: { ip: {...}, ... } }
+        if (msg.partial) {
+          setDevices((prev) => {
+            const byIp = new Map(prev.map((p) => [p.ip, p]));
+            for (const [ip, snap] of Object.entries(msg.data)) {
+              const existing = byIp.get(ip) || {
+                ip,
+                status: 'Blocked',
+                trafficMB: 0,
+                trafficBytes: 0,
+                trafficHistory: [],
+                trafficMbps: 0,
+              };
+              const updated = {
+                ...existing,
+                trafficMB: snap.total_mb ?? existing.trafficMB,
+                trafficBytes: snap.total_bytes ?? existing.trafficBytes,
+                trafficHistory: snap.history ?? existing.trafficHistory,
+                trafficMbps: snap.mbps ?? existing.trafficMbps,
+                display_name: snap.display_name ?? existing.display_name ?? getDisplayName(existing),
+              };
+              byIp.set(ip, updated);
+            }
+            return Array.from(byIp.values());
+          });
+        } else {
+          // full per-device snapshot; merge into known devices
+          setDevices((prev) =>
+            prev.map((d) => {
+              const snap = msg.data[d.ip];
+              if (!snap) return d;
+              return {
+                ...d,
+                trafficMB: snap.total_mb ?? d.trafficMB,
+                trafficBytes: snap.total_bytes ?? d.trafficBytes,
+                trafficHistory: snap.history ?? d.trafficHistory,
+                trafficMbps: snap.mbps ?? d.trafficMbps,
+              };
+            }),
+          );
+        }
       }
 
       if ((msg.event === 'STATUS_UPDATE' || msg.event === 'ANOMALY_ALERT') && msg.ip) {
@@ -173,11 +240,22 @@ const App = () => {
       }
     };
 
+    const fetchSegments = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/segments');
+        const data = await res.json();
+        setSegmentScaffold(data?.segment_scaffold || null);
+      } catch (err) {
+        // keep last known scaffold
+      }
+    };
+
     fetchDevices();
-    const devInterval = setInterval(fetchDevices, 3000);
+    fetchSegments();
+    const segInterval = setInterval(fetchSegments, 30000); // reduced from 10s -> 30s
     return () => {
       ws.close();
-      clearInterval(devInterval);
+      clearInterval(segInterval);
       clearInterval(modeInterval);
       window.removeEventListener('refresh:mode', onRefresh);
       window.removeEventListener('navigate:devices', onNavigateDevices);
@@ -197,9 +275,9 @@ const App = () => {
       }
     };
 
+    // traffic is delivered via websocket `DEVICES_TRAFFIC`; keep a single initial fetch
     fetchTraffic();
-    const interval = setInterval(fetchTraffic, 3000);
-    return () => clearInterval(interval);
+    return () => {};
   }, []);
 
   useEffect(() => {
@@ -293,9 +371,13 @@ const App = () => {
 
   // Extract unique segments from devices
   useEffect(() => {
-    const segments = [...new Set(devices.filter((d) => d.segment).map((d) => d.segment))].sort();
+    const scaffoldSegments = Array.isArray(segmentScaffold?.segments)
+      ? segmentScaffold.segments.map((seg) => seg?.name).filter(Boolean)
+      : [];
+    const deviceSegments = devices.filter((d) => d.segment).map((d) => d.segment);
+    const segments = [...new Set([...scaffoldSegments, ...deviceSegments])].sort();
     setAvailableSegments(segments);
-  }, [devices]);
+  }, [devices, segmentScaffold]);
 
   const arrangedDevices = useMemo(() => {
     const now = Date.now() / 1000;
@@ -823,6 +905,7 @@ const App = () => {
             <Segmentation
               devices={arrangedDevices}
               availableSegments={availableSegments}
+              segmentScaffold={segmentScaffold}
               selectedDevices={selectedDevices}
               setSelectedDevices={setSelectedDevices}
               handleBulkLimit={handleBulkLimit}
