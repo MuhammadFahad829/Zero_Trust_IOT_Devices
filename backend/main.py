@@ -448,6 +448,95 @@ ENFORCED_BLOCKS = {}
 PREV_DEVICE_SNAPSHOT = {}
 
 
+def build_device_traffic_payload(per: dict, device_rows: list, mbps: float):
+    """Given a per-device snapshot `per` (ip -> info), and database `device_rows`,
+    return either a partial diffs dict or an aggregated summary payload dict.
+
+    Returns: tuple(payload_dict_or_None, is_summary_bool)
+    """
+    # build delta payload: include only devices with meaningful changes
+    diffs = {}
+    try:
+        mbps_delta_threshold = float(os.environ.get("DELTA_Mbps_THRESHOLD", "0.02"))
+    except Exception:
+        mbps_delta_threshold = 0.02
+
+    for ip, info in per.items():
+        prev = PREV_DEVICE_SNAPSHOT.get(ip)
+        changed = False
+        if not prev:
+            changed = True
+        else:
+            # check mbps delta
+            try:
+                if abs(float(info.get("mbps", 0.0)) - float(prev.get("mbps", 0.0))) >= mbps_delta_threshold:
+                    changed = True
+            except Exception:
+                changed = True
+            # check total_bytes change
+            try:
+                if int(info.get("total_bytes", 0)) != int(prev.get("total_bytes", 0)):
+                    changed = True
+            except Exception:
+                changed = True
+        if changed:
+            diffs[ip] = info
+
+    # update snapshot store (caller should ensure thread-safety semantics)
+    PREV_DEVICE_SNAPSHOT.clear()
+    PREV_DEVICE_SNAPSHOT.update(per)
+
+    if not diffs:
+        return (None, False)
+
+    try:
+        coalesce_threshold = int(os.environ.get("DELTA_COALESCE_THRESHOLD", "100"))
+    except Exception:
+        coalesce_threshold = 100
+
+    if len(diffs) > coalesce_threshold:
+        # Build aggregated per-segment summary and top-N devices snapshot
+        per_segment = {}
+        seg_map = {r.get('ip'): (r.get('segment') or 'unassigned') for r in device_rows}
+        for ip, info in per.items():
+            seg = seg_map.get(ip, 'unassigned')
+            seg_entry = per_segment.setdefault(seg, {'mbps': 0.0, 'count': 0})
+            seg_entry['mbps'] = seg_entry.get('mbps', 0.0) + float(info.get('mbps', 0.0))
+            seg_entry['count'] = seg_entry.get('count', 0) + 1
+
+        try:
+            top_n = int(os.environ.get('DELTA_COALESCE_TOP_N', '25'))
+        except Exception:
+            top_n = 25
+        sorted_devices = sorted(per.items(), key=lambda kv: float(kv[1].get('mbps', 0.0)), reverse=True)
+        top_devices = []
+        for ip, info in sorted_devices[:top_n]:
+            top_devices.append({
+                'ip': ip,
+                'display_name': info.get('display_name'),
+                'mbps': info.get('mbps'),
+                'total_mb': info.get('total_mb'),
+                'total_bytes': info.get('total_bytes'),
+            })
+
+        summary_payload = {
+            'event': 'DEVICES_TRAFFIC',
+            'summary': True,
+            'data': {
+                'per_segment': per_segment,
+                'top_devices': top_devices,
+                'total_mbps': round(float(mbps), 3),
+                'timestamp': time.time(),
+            },
+            'partial': True,
+        }
+        return (summary_payload, True)
+
+    # small diffs => return normal partials
+    return ({'event': 'DEVICES_TRAFFIC', 'data': diffs, 'partial': True}, False)
+
+
+
 async def _enforcement_loop():
     """Background loop: ensure devices that go offline are blocked and restore when online."""
     await asyncio.sleep(2)
@@ -876,48 +965,44 @@ async def traffic_broadcast_loop():
             except Exception:
                 coalesce_threshold = 100
 
-            if diffs:
-                if len(diffs) > coalesce_threshold:
-                    # Build aggregated per-segment summary and top-N devices snapshot
-                    per_segment = {}
-                    # map ip -> segment via DB rows (fast lookup)
-                    seg_map = {r.get('ip'): (r.get('segment') or 'unassigned') for r in device_rows}
-                    for ip, info in per.items():
-                        seg = seg_map.get(ip, 'unassigned')
-                        seg_entry = per_segment.setdefault(seg, {'mbps': 0.0, 'count': 0})
-                        seg_entry['mbps'] = seg_entry.get('mbps', 0.0) + float(info.get('mbps', 0.0))
-                        seg_entry['count'] = seg_entry.get('count', 0) + 1
+            # Use helper to build payload; this allows debouncing/recomputation below
+            payload, is_summary = build_device_traffic_payload(per, device_rows, mbps)
 
-                    # top devices by mbps (limit)
-                    try:
-                        top_n = int(os.environ.get('DELTA_COALESCE_TOP_N', '25'))
-                    except Exception:
-                        top_n = 25
-                    sorted_devices = sorted(per.items(), key=lambda kv: float(kv[1].get('mbps', 0.0)), reverse=True)
-                    top_devices = []
-                    for ip, info in sorted_devices[:top_n]:
-                        top_devices.append({
-                            'ip': ip,
-                            'display_name': info.get('display_name'),
-                            'mbps': info.get('mbps'),
-                            'total_mb': info.get('total_mb'),
-                            'total_bytes': info.get('total_bytes'),
-                        })
+            # If payload is a summary and we want to debounce, wait a short window and recompute
+            try:
+                coalesce_window_ms = int(os.environ.get('DELTA_COALESCE_WINDOW_MS', '0'))
+            except Exception:
+                coalesce_window_ms = 0
 
-                    summary_payload = {
-                        'event': 'DEVICES_TRAFFIC',
-                        'summary': True,
-                        'data': {
-                            'per_segment': per_segment,
-                            'top_devices': top_devices,
-                            'total_mbps': round(float(mbps), 3),
-                            'timestamp': time.time(),
-                        },
-                        'partial': True,
-                    }
-                    await manager.broadcast(summary_payload)
-                else:
-                    await manager.broadcast({'event': 'DEVICES_TRAFFIC', 'data': diffs, 'partial': True})
+            if payload and is_summary and coalesce_window_ms and coalesce_window_ms > 0:
+                # debounce: sleep and recompute per/devices to capture any immediate changes
+                await asyncio.sleep(coalesce_window_ms / 1000.0)
+                # recompute snapshots
+                try:
+                    device_rows = database.list_devices()
+                    per = {}
+                    for d in device_rows:
+                        ip = d.get('ip')
+                        if not ip:
+                            continue
+                        snap = monitor.get_device_snapshot(ip)
+                        per[ip] = {
+                            'display_name': compute_display_name(d),
+                            'mbps': snap.get('mbps', 0.0),
+                            'total_mb': snap.get('total_mb', 0.0),
+                            'total_bytes': snap.get('total_bytes', 0),
+                            'history': snap.get('history', []),
+                        }
+                    payload, is_summary = build_device_traffic_payload(per, device_rows, mbps)
+                except Exception:
+                    pass
+
+            if payload:
+                try:
+                    # payload already in broadcast-friendly shape
+                    await manager.broadcast(payload)
+                except Exception:
+                    pass
         except Exception:
             pass
         await asyncio.sleep(2)
