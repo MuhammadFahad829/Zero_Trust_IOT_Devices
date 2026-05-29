@@ -1,0 +1,36 @@
+name: Perf Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/add-frontend-tests-ws-integration-and-coalesce
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run benchmark
+        env:
+          ZT_DISABLE_MONITOR: '1'
+        run: |
+          PYTHONPATH=. python3 scripts/benchmark_broadcast.py --count 2000 --iters 20 --mbps 500 > benchmark_output.txt || true
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_output.txt
