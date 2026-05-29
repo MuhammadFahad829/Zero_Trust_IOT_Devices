@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import { motion } from 'framer-motion';
 import { Activity, ShieldAlert, ShieldCheck, Menu, Filter, Layers, CheckCircle, ArrowUpRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import AuditLogsTable from './components/AuditLogsTable';
 import HotspotBanner from './components/HotspotBanner';
+import DeprecationBanner from './components/DeprecationBanner';
 import TopDevices from './components/TopDevices';
 import Segmentation from './components/Segmentation';
 import { containerVariant } from './utils/animations';
@@ -32,7 +34,10 @@ const App = () => {
   const [segmentFilter, setSegmentFilter] = useState('all');
   const [bulkSegment, setBulkSegment] = useState('');
   const [availableSegments, setAvailableSegments] = useState([]);
+  const [segmentScaffold, setSegmentScaffold] = useState(null);
   const [viewMode, setViewMode] = useState('professional');
+  const [trafficSummary, setTrafficSummary] = useState(null);
+  const [deprecationNotice, setDeprecationNotice] = useState(null);
 
   const fetchMode = useCallback(async () => {
     try {
@@ -75,6 +80,10 @@ const App = () => {
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+      if (msg.event === 'DEPRECATION_NOTICE') {
+        setDeprecationNotice(msg.message || 'A server-side endpoint is deprecated; use WebSocket deltas instead.');
+        return;
+      }
       if (msg.event === 'NEW_DEVICE' && msg.data?.ip) {
         setDevices((prev) => {
           if (prev.some((d) => d.ip === msg.data.ip)) return prev;
@@ -94,20 +103,85 @@ const App = () => {
       }
 
       if (msg.event === 'DEVICES_TRAFFIC' && msg.data) {
+        // Support aggregated summary messages when backend coalesces many diffs
+        if (msg.summary) {
+          // keep a small client-side summary and update total if provided
+          setTrafficSummary(msg.data);
+          if (msg.data?.total_mbps !== undefined) setTotalBandwidth(Number(msg.data.total_mbps) || 0);
+
+          // merge top_devices into local devices list where possible
+          if (Array.isArray(msg.data.top_devices) && msg.data.top_devices.length > 0) {
+            setDevices((prev) => {
+              const byIp = new Map(prev.map((p) => [p.ip, p]));
+              for (const td of msg.data.top_devices) {
+                const ip = td.ip;
+                const existing = byIp.get(ip) || {
+                  ip,
+                  status: 'Blocked',
+                  trafficMB: 0,
+                  trafficBytes: 0,
+                  trafficHistory: [],
+                  trafficMbps: 0,
+                };
+                const updated = {
+                  ...existing,
+                  trafficMB: td.total_mb ?? existing.trafficMB,
+                  trafficBytes: td.total_bytes ?? existing.trafficBytes,
+                  trafficHistory: existing.trafficHistory,
+                  trafficMbps: td.mbps ?? existing.trafficMbps,
+                  display_name: td.display_name ?? existing.display_name,
+                };
+                byIp.set(ip, updated);
+              }
+              return Array.from(byIp.values());
+            });
+          }
+
+          return;
+        }
+
         // msg.data: { ip: { mbps, total_mb, total_bytes, history } }
-        setDevices((prev) =>
-          prev.map((d) => {
-            const snap = msg.data[d.ip];
-            if (!snap) return d;
-            return {
-              ...d,
-              trafficMB: snap.total_mb ?? d.trafficMB,
-              trafficBytes: snap.total_bytes ?? d.trafficBytes,
-              trafficHistory: snap.history ?? d.trafficHistory,
-              trafficMbps: snap.mbps ?? d.trafficMbps,
-            };
-          }),
-        );
+        // support partial diffs: backend may send { partial: true, data: { ip: {...}, ... } }
+        if (msg.partial) {
+          setDevices((prev) => {
+            const byIp = new Map(prev.map((p) => [p.ip, p]));
+            for (const [ip, snap] of Object.entries(msg.data)) {
+              const existing = byIp.get(ip) || {
+                ip,
+                status: 'Blocked',
+                trafficMB: 0,
+                trafficBytes: 0,
+                trafficHistory: [],
+                trafficMbps: 0,
+              };
+              const updated = {
+                ...existing,
+                trafficMB: snap.total_mb ?? existing.trafficMB,
+                trafficBytes: snap.total_bytes ?? existing.trafficBytes,
+                trafficHistory: snap.history ?? existing.trafficHistory,
+                trafficMbps: snap.mbps ?? existing.trafficMbps,
+                display_name: snap.display_name ?? existing.display_name ?? getDisplayName(existing),
+              };
+              byIp.set(ip, updated);
+            }
+            return Array.from(byIp.values());
+          });
+        } else {
+          // full per-device snapshot; merge into known devices
+          setDevices((prev) =>
+            prev.map((d) => {
+              const snap = msg.data[d.ip];
+              if (!snap) return d;
+              return {
+                ...d,
+                trafficMB: snap.total_mb ?? d.trafficMB,
+                trafficBytes: snap.total_bytes ?? d.trafficBytes,
+                trafficHistory: snap.history ?? d.trafficHistory,
+                trafficMbps: snap.mbps ?? d.trafficMbps,
+              };
+            }),
+          );
+        }
       }
 
       if ((msg.event === 'STATUS_UPDATE' || msg.event === 'ANOMALY_ALERT') && msg.ip) {
@@ -145,6 +219,11 @@ const App = () => {
     const fetchDevices = async () => {
       try {
         const res = await fetch('http://localhost:8000/devices');
+        if (!res.ok) {
+          // If the endpoint is rate-limited or deprecated, skip seeding from REST
+          console.warn('devices endpoint returned non-OK:', res.status);
+          return;
+        }
         const data = await res.json();
         const deviceList = Array.isArray(data.devices) ? data.devices : [];
         setDevices((prev) => {
@@ -173,16 +252,29 @@ const App = () => {
       }
     };
 
+    const fetchSegments = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/segments');
+        const data = await res.json();
+        setSegmentScaffold(data?.segment_scaffold || null);
+      } catch (err) {
+        // keep last known scaffold
+      }
+    };
+
     fetchDevices();
-    const devInterval = setInterval(fetchDevices, 3000);
+    fetchSegments();
+    const segInterval = setInterval(fetchSegments, 30000); // reduced from 10s -> 30s
     return () => {
       ws.close();
-      clearInterval(devInterval);
+      clearInterval(segInterval);
       clearInterval(modeInterval);
       window.removeEventListener('refresh:mode', onRefresh);
       window.removeEventListener('navigate:devices', onNavigateDevices);
     };
   }, [fetchMode]);
+
+  const dismissDeprecation = () => setDeprecationNotice(null);
 
   useEffect(() => {
     const fetchTraffic = async () => {
@@ -197,9 +289,9 @@ const App = () => {
       }
     };
 
+    // traffic is delivered via websocket `DEVICES_TRAFFIC`; keep a single initial fetch
     fetchTraffic();
-    const interval = setInterval(fetchTraffic, 3000);
-    return () => clearInterval(interval);
+    return () => {};
   }, []);
 
   useEffect(() => {
@@ -293,9 +385,13 @@ const App = () => {
 
   // Extract unique segments from devices
   useEffect(() => {
-    const segments = [...new Set(devices.filter((d) => d.segment).map((d) => d.segment))].sort();
+    const scaffoldSegments = Array.isArray(segmentScaffold?.segments)
+      ? segmentScaffold.segments.map((seg) => seg?.name).filter(Boolean)
+      : [];
+    const deviceSegments = devices.filter((d) => d.segment).map((d) => d.segment);
+    const segments = [...new Set([...scaffoldSegments, ...deviceSegments])].sort();
     setAvailableSegments(segments);
-  }, [devices]);
+  }, [devices, segmentScaffold]);
 
   const arrangedDevices = useMemo(() => {
     const now = Date.now() / 1000;
@@ -415,7 +511,9 @@ const App = () => {
             </div>
           </motion.div>
         </header>
-
+        {deprecationNotice && (
+          <DeprecationBanner message={deprecationNotice} onClose={dismissDeprecation} />
+        )}
         {!hotspotActive && (
           <HotspotBanner onRefresh={fetchMode} />
         )}
@@ -423,7 +521,7 @@ const App = () => {
         {activeTab === 'dashboard' && (
           <div>
             <div className="mb-6 sm:mb-8">
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Security Dashboard</h1>
+                <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-2 leading-snug">Security Dashboard</h1>
               <p className="text-gray-400 max-w-2xl">Real-time monitoring of connected IoT devices and threat status</p>
             </div>
 
@@ -625,95 +723,117 @@ const App = () => {
                       </div>
 
                       <div className="divide-y divide-gray-800/60">
-                        {filteredDevices.map((device) => {
-                          const isBlocked = device.status === 'Quarantined' || device.status === 'Blocked';
-                          const usagePct = Math.min(((device.trafficMB || 0) / (device.mb_limit || 100)) * 100, 100);
-                          return (
-                            <div
-                              key={device.ip}
-                              className={`grid grid-cols-12 gap-2 px-4 py-3 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
-                            >
-                              <div className="col-span-1 flex justify-center">
-                                <button
-                                  onClick={() => {
-                                    const next = new Set(selectedDevices);
-                                    if (next.has(device.ip)) next.delete(device.ip);
-                                    else next.add(device.ip);
-                                    setSelectedDevices(next);
-                                  }}
-                                  aria-pressed={selectedDevices.has(device.ip)}
-                                  aria-label={`${selectedDevices.has(device.ip) ? 'Deselect' : 'Select'} ${device.ip}`}
-                                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${selectedDevices.has(device.ip) ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-gray-700 bg-gray-950/60 text-gray-400 hover:border-gray-500'}`}
-                                >
-                                  {selectedDevices.has(device.ip) ? '✓' : ''}
-                                </button>
-                              </div>
+                                {
+                                  // Virtualize table rows for large device lists using react-window.
+                                  // Provide a fixed row height that matches the existing layout.
+                                  (() => {
+                                    const Row = ({ index, style }) => {
+                                      const device = filteredDevices[index];
+                                      const isBlocked = device.status === 'Quarantined' || device.status === 'Blocked';
+                                      const usagePct = Math.min(((device.trafficMB || 0) / (device.mb_limit || 100)) * 100, 100);
+                                      return (
+                                        <div
+                                          style={style}
+                                          key={device.ip}
+                                          className={`grid grid-cols-12 gap-2 px-4 py-3 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
+                                        >
+                                          <div className="col-span-1 flex justify-center">
+                                            <button
+                                              onClick={() => {
+                                                const next = new Set(selectedDevices);
+                                                if (next.has(device.ip)) next.delete(device.ip);
+                                                else next.add(device.ip);
+                                                setSelectedDevices(next);
+                                              }}
+                                              aria-pressed={selectedDevices.has(device.ip)}
+                                              aria-label={`${selectedDevices.has(device.ip) ? 'Deselect' : 'Select'} ${device.ip}`}
+                                              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${selectedDevices.has(device.ip) ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-gray-700 bg-gray-950/60 text-gray-400 hover:border-gray-500'}`}
+                                            >
+                                              {selectedDevices.has(device.ip) ? '✓' : ''}
+                                            </button>
+                                          </div>
 
-                              <div className="col-span-2 flex items-center gap-3 min-w-0">
-                                <div className="flex-shrink-0">
-                                  <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">
-                                    {getDisplayName(device).slice(0, 2).toUpperCase()}
-                                  </div>
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-white truncate" title={getDisplayName(device)}>
-                                    {getDisplayName(device)}
-                                  </div>
-                                  <div className="text-xs text-gray-500 font-mono truncate">{device.ip}</div>
-                                </div>
-                              </div>
+                                          <div className="col-span-2 flex items-center gap-3 min-w-0">
+                                            <div className="flex-shrink-0">
+                                              <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">
+                                                {getDisplayName(device).slice(0, 2).toUpperCase()}
+                                              </div>
+                                            </div>
+                                            <div className="min-w-0">
+                                              <div className="text-sm font-medium text-white truncate" title={getDisplayName(device)}>
+                                                {getDisplayName(device)}
+                                              </div>
+                                              <div className="text-xs text-gray-500 font-mono truncate">{device.ip}</div>
+                                            </div>
+                                          </div>
 
-                              <div className="col-span-1 text-center">
-                                <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${isBlocked ? 'bg-red-900/40 text-red-300' : device.online ? 'bg-green-900/40 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
-                                  {isBlocked ? 'Quarantined' : device.online ? 'Online' : 'Offline'}
-                                </span>
-                              </div>
+                                          <div className="col-span-1 text-center">
+                                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${isBlocked ? 'bg-red-900/40 text-red-300' : device.online ? 'bg-green-900/40 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                                              {isBlocked ? 'Quarantined' : device.online ? 'Online' : 'Offline'}
+                                            </span>
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300">
-                                {device.segment || '—'}
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300">
+                                            {device.segment || '—'}
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
-                                {(device.trafficMbps || 0).toFixed(2)} MB/s
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
+                                            {(device.trafficMbps || 0).toFixed(2)} MB/s
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
-                                {device.mb_limit || 100}
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
+                                            {device.mb_limit || 100}
+                                          </div>
 
-                              <div className="col-span-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full ${usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`}
-                                      style={{ width: `${usagePct}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-xs text-gray-400 w-12 text-right">{usagePct.toFixed(0)}%</span>
-                                </div>
-                              </div>
+                                          <div className="col-span-2">
+                                            <div className="flex items-center gap-2">
+                                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                                                <div
+                                                  className={`h-full ${usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                                  style={{ width: `${usagePct}%` }}
+                                                />
+                                              </div>
+                                              <span className="text-xs text-gray-400 w-12 text-right">{usagePct.toFixed(0)}%</span>
+                                            </div>
+                                          </div>
 
-                              <div className="col-span-2 flex justify-end gap-2">
-                                <button
-                                  onClick={() => handleStatusChange(device.ip, 'Allowed')}
-                                  disabled={!device.online}
-                                  title={!device.online ? 'Device offline' : 'Allow device'}
-                                  className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-green-900/30 text-green-300 hover:bg-green-900/50 disabled:opacity-30"
-                                >
-                                  <CheckCircle size={14} /> Allow
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(device.ip, 'Quarantined')}
-                                  disabled={!device.online}
-                                  title={!device.online ? 'Device offline' : 'Block device'}
-                                  className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-30"
-                                >
-                                  <ShieldAlert size={14} /> Block
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                                          <div className="col-span-2 flex justify-end gap-2">
+                                            <button
+                                              onClick={() => handleStatusChange(device.ip, 'Allowed')}
+                                              disabled={!device.online}
+                                              title={!device.online ? 'Device offline' : 'Allow device'}
+                                              className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-green-900/30 text-green-300 hover:bg-green-900/50 disabled:opacity-30"
+                                            >
+                                              <CheckCircle size={14} /> Allow
+                                            </button>
+                                            <button
+                                              onClick={() => handleStatusChange(device.ip, 'Quarantined')}
+                                              disabled={!device.online}
+                                              title={!device.online ? 'Device offline' : 'Block device'}
+                                              className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-30"
+                                            >
+                                              <ShieldAlert size={14} /> Block
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    };
+
+                                    const rowHeight = 72; // px, tuned to match padding and typography
+                                    const listHeight = Math.max(300, Math.min(900, window.innerHeight - 400));
+
+                                    return (
+                                      <List
+                                        height={listHeight}
+                                        itemCount={filteredDevices.length}
+                                        itemSize={rowHeight}
+                                        width="100%"
+                                      >
+                                        {Row}
+                                      </List>
+                                    );
+                                  })()
+                                }
                       </div>
                     </div>
                   </div>
@@ -823,6 +943,7 @@ const App = () => {
             <Segmentation
               devices={arrangedDevices}
               availableSegments={availableSegments}
+              segmentScaffold={segmentScaffold}
               selectedDevices={selectedDevices}
               setSelectedDevices={setSelectedDevices}
               handleBulkLimit={handleBulkLimit}

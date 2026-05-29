@@ -137,7 +137,7 @@ main.main-content { max-width: none; margin: 0; width: 100%; }
 @media (min-width: 768px) {
 	/* sidebar uses w-60 (15rem) so keep main offset aligned */
 	/* reduce left offset slightly to tighten gap against sidebar */
-	main.main-content { margin-left: 11.5rem; }
+    main.main-content { margin-left: 15rem; }
 }
 
 /* Slightly soften card shadows for a cleaner, less heavy look */
