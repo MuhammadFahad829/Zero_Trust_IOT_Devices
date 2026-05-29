@@ -49,13 +49,13 @@ const Sidebar = ({
           </button>
         </div>
       )}
-      <div className="flex items-center gap-3 sm:gap-3 mb-6 sm:mb-8">
+      <div className="flex items-center gap-3 sm:gap-3 mb-4 sm:mb-6">
         <div className="shrink-0 p-2.5 bg-accent-green/20 rounded-xl text-accent-green border border-accent-green/30" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.06)' }}>
           <ShieldCheck size={28} />
         </div>
         <div className="min-w-0">
-          <h2 className="text-[15px] sm:text-xl font-extrabold tracking-[-0.02em] leading-tight text-white whitespace-nowrap">ZeroTrust IoT Gateway</h2>
-          <span className="block text-[11px] sm:text-xs text-gray-500 tracking-wide mt-1 whitespace-nowrap">Network Control Center</span>
+          <h2 className="text-[16px] sm:text-2xl font-bold tracking-[-0.02em] leading-tight text-white whitespace-nowrap">ZeroTrust IoT</h2>
+          <span className="block text-[11px] sm:text-sm text-gray-400 tracking-wide mt-0.5 whitespace-nowrap">Network Control Center</span>
         </div>
       </div>
 

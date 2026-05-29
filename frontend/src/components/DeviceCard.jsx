@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import { Monitor, Smartphone, ShieldAlert, CheckCircle, Cpu, Camera, Router, Gauge, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatBytes } from '../utils/format';
-import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '../utils/deviceIdentity';
+import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta, getDeviceBadgeText } from '../utils/deviceIdentity';
 
 const TrafficChart = lazy(() => import('./TrafficChart'));
 
@@ -20,7 +20,7 @@ const getCategoryIcon = (category) => {
   }
 };
 
-export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, compact = false }) {
+function DeviceCard({ device, onVerify, onBlock, onLimitChange, compact = false }) {
   const isBlocked = device.status === 'Quarantined' || device.status === 'Blocked';
   const vendor = useMemo(() => getVendorMeta(device.vendor), [device.vendor]);
   const category = useMemo(() => inferCategory(device.device_type, device.vendor), [device.device_type, device.vendor]);
@@ -37,8 +37,25 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
     return Math.min((used / lim) * 100, 100);
   }, [device.trafficMB, device.mb_limit]);
 
-  const [openDetails, setOpenDetails] = useState(false);
-  const storageKey = `device:collapsed:${device.ip}`;
+
+// Use a shallow comparison of the most relevant device fields to avoid
+// unnecessary re-renders when unrelated state changes elsewhere in the app.
+function deviceEqual(prevProps, nextProps) {
+  const a = prevProps.device;
+  const b = nextProps.device;
+  if (a.ip !== b.ip) return false;
+  if (a.online !== b.online) return false;
+  if (a.status !== b.status) return false;
+  if ((a.trafficMbps || 0) !== (b.trafficMbps || 0)) return false;
+  if ((a.trafficBytes || 0) !== (b.trafficBytes || 0)) return false;
+  if ((a.trafficMB || 0) !== (b.trafficMB || 0)) return false;
+  if ((a.mb_limit || 0) !== (b.mb_limit || 0)) return false;
+  if ((a.segment || '') !== (b.segment || '')) return false;
+  if ((a.alert || false) !== (b.alert || false)) return false;
+  return true;
+}
+
+export default React.memo(DeviceCard, deviceEqual);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -173,9 +190,9 @@ export default function DeviceCard({ device, onVerify, onBlock, onLimitChange, c
             <div
               className={`${compact ? 'w-9 h-9' : 'w-10 h-10'} rounded-full text-white font-bold text-xs flex items-center justify-center border border-white/10 shadow-md flex-shrink-0`}
               style={{ backgroundColor: vendor.color, boxShadow: `0 0 0 1px ${categoryMeta.border}` }}
-              title={vendor.name}
+              title={displayName}
             >
-              {vendor.token}
+              {getDeviceBadgeText(device)}
             </div>
             <div className="min-w-0">
               <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold leading-tight truncate`} title={displayName}>{displayName}</h3>
