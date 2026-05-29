@@ -23,6 +23,7 @@ from backend import database
 from backend.identity import compute_display_name
 import time
 from typing import Optional
+from backend.rate_limiter import RateLimiter
 
 app = FastAPI(title="ZeroTrust IoT Gateway")
 
@@ -453,6 +454,9 @@ ENFORCED_BLOCKS = {}
 
 # previous per-device snapshot for delta broadcasts
 PREV_DEVICE_SNAPSHOT = {}
+
+# Rate limiter instance (uses REDIS_URL if provided)
+rate_limiter = RateLimiter()
 
 
 def build_device_traffic_payload(per: dict, device_rows: list, mbps: float):
@@ -1424,7 +1428,7 @@ def api_list_devices(request: Request, response: Response):
     """Return list of devices. This endpoint is deprecated for heavy polling; a rate-limiter
     and deprecation headers are provided to guide clients toward websocket deltas.
     """
-    # Rate limiting (per-client IP)
+    # Rate limiting (per-client IP) — prefer Redis-backed limiter when available
     client_ip = request.client.host if request.client else 'unknown'
     try:
         limit = int(os.environ.get('DEVICES_RATE_LIMIT', '2'))
@@ -1435,30 +1439,17 @@ def api_list_devices(request: Request, response: Response):
     except Exception:
         window = 10
 
-    # in-memory rate map: ip -> [timestamps]
-    if not hasattr(api_list_devices, '_rate_map'):
-        api_list_devices._rate_map = {}
+    allowed, remaining, retry_after = rate_limiter.allow_request(client_ip, limit, window)
 
-    now_ts = time.time()
-    entries = api_list_devices._rate_map.get(client_ip, [])
-    # drop timestamps older than window
-    entries = [t for t in entries if now_ts - t < window]
-    remaining = max(0, limit - len(entries))
     # set deprecation header for all responses
     response.headers['X-Deprecated'] = 'true'
     response.headers['Warning'] = '199 - "Deprecated endpoint: use WebSocket deltas instead"'
     response.headers['X-RateLimit-Limit'] = str(limit)
     response.headers['X-RateLimit-Remaining'] = str(remaining)
 
-    if remaining <= 0:
-        # rate limited
-        retry_after = int(window - (now_ts - entries[0]) if entries else window)
+    if not allowed:
         response.headers['Retry-After'] = str(retry_after)
         return Response(content=json.dumps({'error': 'rate_limited', 'retry_after': retry_after}), status_code=429, media_type='application/json')
-
-    # record this request
-    entries.append(now_ts)
-    api_list_devices._rate_map[client_ip] = entries
     device_rows = database.list_devices()
     devices = []
     for row in device_rows:
