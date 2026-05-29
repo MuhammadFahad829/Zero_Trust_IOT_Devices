@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import { motion } from 'framer-motion';
 import { Activity, ShieldAlert, ShieldCheck, Menu, Filter, Layers, CheckCircle, ArrowUpRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -722,95 +723,117 @@ const App = () => {
                       </div>
 
                       <div className="divide-y divide-gray-800/60">
-                        {filteredDevices.map((device) => {
-                          const isBlocked = device.status === 'Quarantined' || device.status === 'Blocked';
-                          const usagePct = Math.min(((device.trafficMB || 0) / (device.mb_limit || 100)) * 100, 100);
-                          return (
-                            <div
-                              key={device.ip}
-                              className={`grid grid-cols-12 gap-2 px-4 py-3 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
-                            >
-                              <div className="col-span-1 flex justify-center">
-                                <button
-                                  onClick={() => {
-                                    const next = new Set(selectedDevices);
-                                    if (next.has(device.ip)) next.delete(device.ip);
-                                    else next.add(device.ip);
-                                    setSelectedDevices(next);
-                                  }}
-                                  aria-pressed={selectedDevices.has(device.ip)}
-                                  aria-label={`${selectedDevices.has(device.ip) ? 'Deselect' : 'Select'} ${device.ip}`}
-                                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${selectedDevices.has(device.ip) ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-gray-700 bg-gray-950/60 text-gray-400 hover:border-gray-500'}`}
-                                >
-                                  {selectedDevices.has(device.ip) ? '✓' : ''}
-                                </button>
-                              </div>
+                                {
+                                  // Virtualize table rows for large device lists using react-window.
+                                  // Provide a fixed row height that matches the existing layout.
+                                  (() => {
+                                    const Row = ({ index, style }) => {
+                                      const device = filteredDevices[index];
+                                      const isBlocked = device.status === 'Quarantined' || device.status === 'Blocked';
+                                      const usagePct = Math.min(((device.trafficMB || 0) / (device.mb_limit || 100)) * 100, 100);
+                                      return (
+                                        <div
+                                          style={style}
+                                          key={device.ip}
+                                          className={`grid grid-cols-12 gap-2 px-4 py-3 items-center transition-colors ${isBlocked ? 'bg-red-950/10' : 'bg-transparent'} ${selectedDevices.has(device.ip) ? 'ring-1 ring-blue-500/50 bg-blue-500/5' : ''}`}
+                                        >
+                                          <div className="col-span-1 flex justify-center">
+                                            <button
+                                              onClick={() => {
+                                                const next = new Set(selectedDevices);
+                                                if (next.has(device.ip)) next.delete(device.ip);
+                                                else next.add(device.ip);
+                                                setSelectedDevices(next);
+                                              }}
+                                              aria-pressed={selectedDevices.has(device.ip)}
+                                              aria-label={`${selectedDevices.has(device.ip) ? 'Deselect' : 'Select'} ${device.ip}`}
+                                              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${selectedDevices.has(device.ip) ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-gray-700 bg-gray-950/60 text-gray-400 hover:border-gray-500'}`}
+                                            >
+                                              {selectedDevices.has(device.ip) ? '✓' : ''}
+                                            </button>
+                                          </div>
 
-                              <div className="col-span-2 flex items-center gap-3 min-w-0">
-                                <div className="flex-shrink-0">
-                                  <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">
-                                    {getDisplayName(device).slice(0, 2).toUpperCase()}
-                                  </div>
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-white truncate" title={getDisplayName(device)}>
-                                    {getDisplayName(device)}
-                                  </div>
-                                  <div className="text-xs text-gray-500 font-mono truncate">{device.ip}</div>
-                                </div>
-                              </div>
+                                          <div className="col-span-2 flex items-center gap-3 min-w-0">
+                                            <div className="flex-shrink-0">
+                                              <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">
+                                                {getDisplayName(device).slice(0, 2).toUpperCase()}
+                                              </div>
+                                            </div>
+                                            <div className="min-w-0">
+                                              <div className="text-sm font-medium text-white truncate" title={getDisplayName(device)}>
+                                                {getDisplayName(device)}
+                                              </div>
+                                              <div className="text-xs text-gray-500 font-mono truncate">{device.ip}</div>
+                                            </div>
+                                          </div>
 
-                              <div className="col-span-1 text-center">
-                                <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${isBlocked ? 'bg-red-900/40 text-red-300' : device.online ? 'bg-green-900/40 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
-                                  {isBlocked ? 'Quarantined' : device.online ? 'Online' : 'Offline'}
-                                </span>
-                              </div>
+                                          <div className="col-span-1 text-center">
+                                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${isBlocked ? 'bg-red-900/40 text-red-300' : device.online ? 'bg-green-900/40 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                                              {isBlocked ? 'Quarantined' : device.online ? 'Online' : 'Offline'}
+                                            </span>
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300">
-                                {device.segment || '—'}
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300">
+                                            {device.segment || '—'}
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
-                                {(device.trafficMbps || 0).toFixed(2)} MB/s
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
+                                            {(device.trafficMbps || 0).toFixed(2)} MB/s
+                                          </div>
 
-                              <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
-                                {device.mb_limit || 100}
-                              </div>
+                                          <div className="col-span-1 text-center text-sm text-gray-300 font-mono">
+                                            {device.mb_limit || 100}
+                                          </div>
 
-                              <div className="col-span-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full ${usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`}
-                                      style={{ width: `${usagePct}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-xs text-gray-400 w-12 text-right">{usagePct.toFixed(0)}%</span>
-                                </div>
-                              </div>
+                                          <div className="col-span-2">
+                                            <div className="flex items-center gap-2">
+                                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                                                <div
+                                                  className={`h-full ${usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                                  style={{ width: `${usagePct}%` }}
+                                                />
+                                              </div>
+                                              <span className="text-xs text-gray-400 w-12 text-right">{usagePct.toFixed(0)}%</span>
+                                            </div>
+                                          </div>
 
-                              <div className="col-span-2 flex justify-end gap-2">
-                                <button
-                                  onClick={() => handleStatusChange(device.ip, 'Allowed')}
-                                  disabled={!device.online}
-                                  title={!device.online ? 'Device offline' : 'Allow device'}
-                                  className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-green-900/30 text-green-300 hover:bg-green-900/50 disabled:opacity-30"
-                                >
-                                  <CheckCircle size={14} /> Allow
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(device.ip, 'Quarantined')}
-                                  disabled={!device.online}
-                                  title={!device.online ? 'Device offline' : 'Block device'}
-                                  className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-30"
-                                >
-                                  <ShieldAlert size={14} /> Block
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                                          <div className="col-span-2 flex justify-end gap-2">
+                                            <button
+                                              onClick={() => handleStatusChange(device.ip, 'Allowed')}
+                                              disabled={!device.online}
+                                              title={!device.online ? 'Device offline' : 'Allow device'}
+                                              className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-green-900/30 text-green-300 hover:bg-green-900/50 disabled:opacity-30"
+                                            >
+                                              <CheckCircle size={14} /> Allow
+                                            </button>
+                                            <button
+                                              onClick={() => handleStatusChange(device.ip, 'Quarantined')}
+                                              disabled={!device.online}
+                                              title={!device.online ? 'Device offline' : 'Block device'}
+                                              className="inline-flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-30"
+                                            >
+                                              <ShieldAlert size={14} /> Block
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    };
+
+                                    const rowHeight = 72; // px, tuned to match padding and typography
+                                    const listHeight = Math.max(300, Math.min(900, window.innerHeight - 400));
+
+                                    return (
+                                      <List
+                                        height={listHeight}
+                                        itemCount={filteredDevices.length}
+                                        itemSize={rowHeight}
+                                        width="100%"
+                                      >
+                                        {Row}
+                                      </List>
+                                    );
+                                  })()
+                                }
                       </div>
                     </div>
                   </div>
