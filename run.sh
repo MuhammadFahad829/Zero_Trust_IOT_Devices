@@ -55,7 +55,7 @@ fi
 # Start backend via the hardened launcher when available.
 if [ -x "${ROOT_DIR}/run-backend.sh" ]; then
   log "Starting backend with run-backend.sh"
-  sudo "${ROOT_DIR}/run-backend.sh"
+  "${ROOT_DIR}/run-backend.sh"
 else
   log "Starting backend directly on :8000"
   mkdir -p "$ROOT_DIR/logs"
@@ -82,6 +82,6 @@ else
   echo "[!] Backend did not respond in time. Check logs: /tmp/zerotrust-backend.log or $ROOT_DIR/logs/zerotrust-backend.log" >&2
 fi
 
-echo "Started. Backend logs: ${ROOT_DIR}/logs/zerotrust-backend.log /tmp/zerotrust-backend.log  Frontend logs: ${ROOT_DIR}/logs/zerotrust-frontend.log"
+echo "Started. Backend logs: ${ROOT_DIR}/logs/zerotrust-backend.log  Frontend logs: ${ROOT_DIR}/logs/zerotrust-frontend.log"
 
 exit 0

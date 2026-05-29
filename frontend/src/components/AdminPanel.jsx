@@ -21,6 +21,11 @@ export default function AdminPanel({ hotspotActive = true }) {
   const [policiesText, setPoliciesText] = useState('');
   const [savingPolicies, setSavingPolicies] = useState(false);
 
+  const segmentList = segmentsInfo?.segment_scaffold?.segments || segmentsInfo?.policies?.segments || [];
+  const assignedSegments = segmentsInfo?.segment_scaffold?.assigned_segments || [];
+  const unassignedDevices = segmentsInfo?.segment_scaffold?.unassigned_devices || [];
+  const vlanPreviewItems = segmentsInfo?.segment_scaffold?.vlan_preview || [];
+
   useEffect(() => {
     const saved = localStorage.getItem('PROVISION_TOKEN');
     setTokenStatus(saved ? 'set' : 'not-set');
@@ -159,6 +164,24 @@ export default function AdminPanel({ hotspotActive = true }) {
             </p>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+            <div className="rounded-xl border border-gray-800 bg-gray-950/30 p-3">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Segments</div>
+              <div className="text-2xl font-bold text-white mt-1">{segmentList.length}</div>
+              <div className="text-xs text-gray-400">from scaffold preview</div>
+            </div>
+            <div className="rounded-xl border border-gray-800 bg-gray-950/30 p-3">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Assigned</div>
+              <div className="text-2xl font-bold text-white mt-1">{assignedSegments.length}</div>
+              <div className="text-xs text-gray-400">with devices mapped</div>
+            </div>
+            <div className="rounded-xl border border-gray-800 bg-gray-950/30 p-3">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-gray-500">Unassigned</div>
+              <div className="text-2xl font-bold text-white mt-1">{unassignedDevices.length}</div>
+              <div className="text-xs text-gray-400">devices awaiting segment</div>
+            </div>
+          </div>
+
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs text-gray-400">Assigned segments</div>
@@ -206,6 +229,75 @@ export default function AdminPanel({ hotspotActive = true }) {
                 <span className="text-xs text-gray-500">No segments defined in policies.json</span>
               )}
             </div>
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-gray-700/50 bg-gray-950/30 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xs text-gray-400">VLAN / policy scaffold</div>
+                <div className="text-sm font-semibold text-gray-100">Preview generated from `/segments`</div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  setPreviewLoading(true);
+                  try {
+                    const res = await fetch('http://localhost:8000/segments/preview');
+                    const json = await res.json();
+                    setSegmentPreview(json);
+                  } catch (e) {
+                    setSegmentPreview({ error: String(e) });
+                  } finally {
+                    setPreviewLoading(false);
+                  }
+                }}
+                className="btn btn-ghost text-xs"
+              >
+                {previewLoading ? 'Loading...' : 'Refresh preview'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-300 mb-3">
+              <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-3">
+                <div className="text-gray-500 mb-1">Device mapping</div>
+                <div className="font-medium text-gray-100">{segmentList.length ? segmentList.map((seg) => `${seg.name || 'unknown'} · ${seg.device_count ?? 0}`).join(' | ') : 'No scaffold data yet'}</div>
+              </div>
+              <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-3">
+                <div className="text-gray-500 mb-1">VLAN preview</div>
+                <div className="font-medium text-gray-100">{Array.isArray(vlanPreviewItems) && vlanPreviewItems.length ? vlanPreviewItems.map((item) => `${item.name || item.segment || 'segment'}:${item.vlan_id ?? '—'}`).join(' | ') : 'No VLAN preview yet'}</div>
+              </div>
+            </div>
+
+            <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+              {segmentList.length > 0 ? segmentList.map((seg) => (
+                <div key={seg.name} className="rounded-xl border border-gray-800 bg-gray-900/30 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-white truncate">{seg.name || 'Unnamed segment'}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {seg.cidr || 'No CIDR'} · VLAN {seg.vlan_id ?? '—'} · {seg.iface || 'no iface'}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-gray-400">
+                      <div>{seg.device_count ?? 0} devices</div>
+                      <div>{seg.limit_mbps ?? '—'} Mbps</div>
+                    </div>
+                  </div>
+                  {Array.isArray(seg.device_ips) && seg.device_ips.length > 0 && (
+                    <div className="mt-2 text-[11px] text-gray-400 break-all">{seg.device_ips.join(', ')}</div>
+                  )}
+                </div>
+              )) : (
+                <div className="text-xs text-gray-500">No segment scaffold returned yet.</div>
+              )}
+            </div>
+
+            {segmentPreview && (
+              <div className="mt-3 rounded-xl border border-gray-800 bg-gray-900/40 p-3">
+                <div className="text-xs text-gray-400 mb-1">Preview response</div>
+                <pre className="text-[11px] text-gray-300 whitespace-pre-wrap break-words">{JSON.stringify(segmentPreview, null, 2)}</pre>
+              </div>
+            )}
           </div>
 
           <div className="mb-4">

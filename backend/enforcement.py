@@ -26,6 +26,87 @@ class EnforcementEngine:
             # best-effort; do not fail initialization if policies missing or malformed
             pass
 
+    def load_policy_document(self, policies_path: Optional[str] = None) -> dict:
+        """Return the parsed policy document without mutating engine state."""
+        if not policies_path:
+            policies_path = str(Path(__file__).parent / "policies.json")
+
+        p = Path(policies_path)
+        if not p.exists():
+            return {}
+
+        try:
+            with p.open() as fh:
+                return json.load(fh)
+        except Exception:
+            return {}
+
+    def filter_policy_document(self, segment_names: Optional[list] = None, policies_path: Optional[str] = None) -> dict:
+        """Return a policy document filtered to the requested segment names."""
+        data = self.load_policy_document(policies_path)
+        if not data:
+            return {}
+
+        if not segment_names:
+            return data
+
+        wanted = {str(name).strip() for name in segment_names if str(name).strip()}
+        if not wanted:
+            return data
+
+        filtered = [segment for segment in data.get("segments", []) if segment.get("name") in wanted]
+        data_copy = dict(data)
+        data_copy["segments"] = filtered
+        return data_copy
+
+    def build_segment_scaffold(self, policies_path: Optional[str] = None) -> dict:
+        """Summarize configured segments and their current device assignments.
+
+        This is intentionally read-only so the UI can render a provisioning preview
+        before any VLAN or iptables changes are applied.
+        """
+        policy_doc = self.load_policy_document(policies_path)
+        devices = database.list_devices()
+        assigned_segments = sorted({
+            (device.get("segment") or "").strip()
+            for device in devices
+            if (device.get("segment") or "").strip()
+        })
+
+        devices_by_segment = {}
+        unassigned_devices = []
+        for device in devices:
+            segment = (device.get("segment") or "").strip()
+            ip = device.get("ip")
+            if not ip:
+                continue
+            if segment:
+                devices_by_segment.setdefault(segment, []).append(ip)
+            else:
+                unassigned_devices.append(ip)
+
+        segments = []
+        for segment in policy_doc.get("segments", []):
+            name = (segment.get("name") or "").strip()
+            if not name:
+                continue
+            device_ips = devices_by_segment.get(name, [])
+            segments.append({
+                "name": name,
+                "cidr": segment.get("cidr", ""),
+                "vlan_id": segment.get("vlan_id"),
+                "iface": segment.get("iface", ""),
+                "limit_mbps": segment.get("limit_mbps"),
+                "device_count": len(device_ips),
+                "device_ips": device_ips,
+            })
+
+        return {
+            "segments": segments,
+            "assigned_segments": assigned_segments,
+            "unassigned_devices": unassigned_devices,
+        }
+
     def _run_cmd(self, command: str) -> bool:
         """Safely executes a shell command using shlex for input sanitization."""
         if self.dry_run:
@@ -308,18 +389,8 @@ class EnforcementEngine:
         Expected format: { "segments": [{"name":"iot","cidr":"...","vlan_id":100,"iface":"eth0.100"}, ...] }
         This will set `self.policy_defs[name] = {...}` and, if `iface` present, `self.segments[name] = iface`.
         """
-        # Resolve default path relative to this file
-        if not policies_path:
-            policies_path = str(Path(__file__).parent / "policies.json")
-
-        p = Path(policies_path)
-        if not p.exists():
-            return
-
-        try:
-            with p.open() as fh:
-                data = json.load(fh)
-        except Exception:
+        data = self.load_policy_document(policies_path)
+        if not data:
             return
 
         segs = data.get("segments", [])

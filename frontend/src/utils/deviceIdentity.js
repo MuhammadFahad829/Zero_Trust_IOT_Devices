@@ -29,6 +29,8 @@ const VENDOR_RULES = [
   { match: /lg\b/i, name: 'LG', token: 'LG', color: '#fb7185' },
 ];
 
+const DEVICE_LABEL_FIELDS = ['display_name', 'name', 'hostname', 'device_name', 'alias', 'label'];
+
 function fallbackToken(value) {
   if (!value) return 'DV';
   const words = String(value)
@@ -40,6 +42,30 @@ function fallbackToken(value) {
   if (words.length === 0) return 'DV';
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+function cleanText(value) {
+  const text = String(value ?? '').trim();
+  return text && !/^(unknown|null|undefined)$/i.test(text) ? text : '';
+}
+
+function getDeviceLabel(device) {
+  if (!device) return '';
+  for (const field of DEVICE_LABEL_FIELDS) {
+    const label = cleanText(device[field]);
+    if (label) return label;
+  }
+  return '';
+}
+
+function hasPrivateVendorHint(vendor) {
+  return /private|randomized|private\/randomized|randomized mac|unknown/i.test(String(vendor || ''));
+}
+
+function getNameSuffix(device) {
+  const macTail = String(device?.mac || '').split(':').pop() || '';
+  const ipTail = String(device?.ip || '').split('.').pop() || '';
+  return macTail || ipTail ? ` ${macTail || ipTail}` : '';
 }
 
 export function getVendorMeta(vendor) {
@@ -104,23 +130,50 @@ export function getCategoryMeta(deviceType, vendor) {
 
 export function getDisplayName(device) {
   if (!device) return 'Unknown Device';
+  const explicitLabel = getDeviceLabel(device);
+  if (explicitLabel) return explicitLabel;
+
   const vendor = getVendorMeta(device.vendor);
   const category = inferCategory(device.device_type, device.vendor);
-  const ipTail = String(device.ip || '').split('.').pop() || '';
-  const macTail = String(device.mac || '').split(':').pop() || '';
+  const suffix = getNameSuffix(device);
 
-  // Treat explicitly-private/randomized vendor strings as unknown and prefer
-  // device type or MAC tail for a clearer display name.
-  if (device.vendor && !/private|randomized|private\/randomized|randomized mac/i.test(String(device.vendor))) {
-    if (category === 'Other') return vendor.name;
-    return `${vendor.name} ${category}`;
+  if (device.vendor && !hasPrivateVendorHint(device.vendor)) {
+    if (category === 'Other') return `${vendor.name}${suffix}`;
+    return `${vendor.name} ${category}${suffix}`.trim();
   }
-  // Provide better fallback names using MAC tail when available.
-  // If vendor is private/randomized, try to use any detected device type first
-  // then fall back to MAC/IP tail to make the device identifiable.
-  if (device.device_type && device.device_type !== 'Unknown') {
-    return macTail ? `${device.device_type} ${macTail}` : `${device.device_type}`;
+
+  if (device.device_type && cleanText(device.device_type) && !/unknown/i.test(String(device.device_type))) {
+    return `${device.device_type}${suffix}`.trim();
   }
-  if (category === 'Other') return macTail ? `Unknown Device ${macTail}` : ipTail ? `Unknown Device ${ipTail}` : 'Unknown Device';
-  return macTail ? `${category} ${macTail}` : ipTail ? `${category} Device ${ipTail}` : `${category} Device`;
+
+  if (category === 'Other') return `Unknown Device${suffix}`.trim();
+  return `${category} Device${suffix}`.trim();
 }
+
+export function getDeviceBadgeText(device) {
+  if (!device) return 'DV';
+
+  const explicitLabel = getDeviceLabel(device);
+  if (explicitLabel) {
+    const parts = explicitLabel
+      .replace(/[^a-zA-Z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((part) => !['device', 'unknown', 'private'].includes(part.toLowerCase()));
+
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  // Prefer computed display name parts over legacy vendor token fallback
+  const displayName = getDisplayName(device)
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((part) => !['device', 'unknown', 'private'].includes(part.toLowerCase()));
+
+  if (displayName.length >= 2) return `${displayName[0][0]}${displayName[1][0]}`.toUpperCase();
+  if (displayName.length === 1) return displayName[0].slice(0, 2).toUpperCase();
+  return fallbackToken(device.ip || device.mac || device.vendor);
+}
+

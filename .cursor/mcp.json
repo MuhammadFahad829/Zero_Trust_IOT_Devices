@@ -9,7 +9,6 @@
       "env": {
         "JET_WORKSPACE": "/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices",
         "JET_API_URL": "https://api.jetro.ai",
-        "JET_JWT": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImM5YTBjMWRlYWEyN2JjNjMyNTUzYmM4MWEyMmQ4NzY1MWM3MTMyY2IiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vamV0cm8tY2RhZWYiLCJhdWQiOiJqZXRyby1jZGFlZiIsImF1dGhfdGltZSI6MTc3OTY0NzI0NywidXNlcl9pZCI6IldhTnJTSmhKbDBUMFUxS0lXTzlvcUoxaHRuYTIiLCJzdWIiOiJXYU5yU0poSmwwVDBVMUtJV085b3FKMWh0bmEyIiwiaWF0IjoxNzc5NjQ3MjQ3LCJleHAiOjE3Nzk2NTA4NDcsImVtYWlsIjoibXVzdGFmYWZhaGhhZDI5QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm11c3RhZmFmYWhoYWQyOUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.KKkn4u4BipOEMOJu0iBwn7R1Zvn8DHQe3Cjz2SFE82QRLLB0TF-tQ-X0psCH0d_lJezi9zh7-RA503W9hxse9JzNFPXVuIDqxaTuUshwhW3OFi-Rh7gbkABS12aP9FFQL6qWpkZ1fkdOml7Wif75fburvxlmLKMLVANzSWg_jn4AMUPKznZFJFK_JQJZQ7D6_Vss8_7GDcEpgDiewujRcwlFjo1_KCirJuk3KHn7iCeXsMkBZn95q6T16-lWZQvrrX2_oZnoh3E144Pi_tDrmFc185til3eZl7RoV6yNW3YrQyRd9XclIbEGd0UXduu87S8zpBT85xuxOPC8oKZo7Q",
         "PATH": "/home/fahad-mustafa/.jetro/runtime:/home/fahad-mustafa/.local/bin:/home/fahad-mustafa/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin"
       }
     }
