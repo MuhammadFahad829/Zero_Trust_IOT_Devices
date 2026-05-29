@@ -520,7 +520,7 @@ const App = () => {
         {activeTab === 'dashboard' && (
           <div>
             <div className="mb-6 sm:mb-8">
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Security Dashboard</h1>
+                <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-2 leading-snug">Security Dashboard</h1>
               <p className="text-gray-400 max-w-2xl">Real-time monitoring of connected IoT devices and threat status</p>
             </div>
 
