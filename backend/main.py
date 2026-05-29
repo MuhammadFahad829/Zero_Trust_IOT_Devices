@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Request, Response
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,12 +20,16 @@ from backend.enforcement import EnforcementEngine
 from backend.orchestrator import NetworkOrchestrator, _lookup_oui, _detect_device_type
 from backend.monitor import TrafficMonitor
 from backend import database
+from backend.identity import compute_display_name
 import time
 from typing import Optional
+from backend.rate_limiter import RateLimiter
 
 app = FastAPI(title="ZeroTrust IoT Gateway")
 
 LAN_INTERFACE = os.environ.get("LAN_INTERFACE", "wlp2s0")
+# Test/CI flag to avoid starting packet-sniffing or raw-socket monitor threads during tests
+ZT_DISABLE_MONITOR = os.environ.get('ZT_DISABLE_MONITOR', '0').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def _detect_default_wan_interface() -> str:
@@ -229,6 +233,14 @@ def _device_segment_for_ip(ip: str) -> str:
     return ""
 
 
+def _display_for_ip(ip: str) -> str:
+    try:
+        row = database.get_device(ip) or next((r for r in database.list_devices() if r.get('ip') == ip), None)
+        return compute_display_name(row) if row else 'Unknown Device'
+    except Exception:
+        return 'Unknown Device'
+
+
 def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_type: str = None, online: bool = True):
     now = time.time()
     current = database.get_device(ip) or {}
@@ -264,6 +276,11 @@ def _broadcast_device_presence(ip: str, mac: str, vendor: str = None, device_typ
             "segment": segment,
         },
     }
+    try:
+        # include server-computed canonical display name
+        payload['data']['display_name'] = compute_display_name(current if current else {"ip": ip, "mac": mac, "vendor": vendor, "device_type": device_type})
+    except Exception:
+        pass
 
     try:
         asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
@@ -421,14 +438,114 @@ except RuntimeError:
     asyncio.set_event_loop(loop)
 
 # Scout Start
-scout = NetworkOrchestrator(interface=LAN_INTERFACE, callback=on_device_discovered)
-scout.start_sniffing()
+scout = None
+if not ZT_DISABLE_MONITOR:
+    scout = NetworkOrchestrator(interface=LAN_INTERFACE, callback=on_device_discovered)
+    try:
+        scout.start_sniffing()
+    except Exception:
+        pass
 
 # Cursor for deterministic round-robin probing across LAN hosts.
 PROBE_CURSOR = 0
 
 # In-memory map for auto-enforced blocks: ip -> previous_status
 ENFORCED_BLOCKS = {}
+
+# previous per-device snapshot for delta broadcasts
+PREV_DEVICE_SNAPSHOT = {}
+
+# Rate limiter instance (uses REDIS_URL if provided)
+rate_limiter = RateLimiter()
+
+
+def build_device_traffic_payload(per: dict, device_rows: list, mbps: float):
+    """Given a per-device snapshot `per` (ip -> info), and database `device_rows`,
+    return either a partial diffs dict or an aggregated summary payload dict.
+
+    Returns: tuple(payload_dict_or_None, is_summary_bool)
+    """
+    # build delta payload: include only devices with meaningful changes
+    diffs = {}
+    try:
+        mbps_delta_threshold = float(os.environ.get("DELTA_Mbps_THRESHOLD", "0.02"))
+    except Exception:
+        mbps_delta_threshold = 0.02
+
+    for ip, info in per.items():
+        prev = PREV_DEVICE_SNAPSHOT.get(ip)
+        changed = False
+        if not prev:
+            changed = True
+        else:
+            # check mbps delta
+            try:
+                if abs(float(info.get("mbps", 0.0)) - float(prev.get("mbps", 0.0))) >= mbps_delta_threshold:
+                    changed = True
+            except Exception:
+                changed = True
+            # check total_bytes change
+            try:
+                if int(info.get("total_bytes", 0)) != int(prev.get("total_bytes", 0)):
+                    changed = True
+            except Exception:
+                changed = True
+        if changed:
+            diffs[ip] = info
+
+    # update snapshot store (caller should ensure thread-safety semantics)
+    PREV_DEVICE_SNAPSHOT.clear()
+    PREV_DEVICE_SNAPSHOT.update(per)
+
+    if not diffs:
+        return (None, False)
+
+    try:
+        coalesce_threshold = int(os.environ.get("DELTA_COALESCE_THRESHOLD", "100"))
+    except Exception:
+        coalesce_threshold = 100
+
+    if len(diffs) > coalesce_threshold:
+        # Build aggregated per-segment summary and top-N devices snapshot
+        per_segment = {}
+        seg_map = {r.get('ip'): (r.get('segment') or 'unassigned') for r in device_rows}
+        for ip, info in per.items():
+            seg = seg_map.get(ip, 'unassigned')
+            seg_entry = per_segment.setdefault(seg, {'mbps': 0.0, 'count': 0})
+            seg_entry['mbps'] = seg_entry.get('mbps', 0.0) + float(info.get('mbps', 0.0))
+            seg_entry['count'] = seg_entry.get('count', 0) + 1
+
+        try:
+            top_n = int(os.environ.get('DELTA_COALESCE_TOP_N', '25'))
+        except Exception:
+            top_n = 25
+        sorted_devices = sorted(per.items(), key=lambda kv: float(kv[1].get('mbps', 0.0)), reverse=True)
+        top_devices = []
+        for ip, info in sorted_devices[:top_n]:
+            top_devices.append({
+                'ip': ip,
+                'display_name': info.get('display_name'),
+                'mbps': info.get('mbps'),
+                'total_mb': info.get('total_mb'),
+                'total_bytes': info.get('total_bytes'),
+            })
+
+        summary_payload = {
+            'event': 'DEVICES_TRAFFIC',
+            'summary': True,
+            'data': {
+                'per_segment': per_segment,
+                'top_devices': top_devices,
+                'total_mbps': round(float(mbps), 3),
+                'timestamp': time.time(),
+            },
+            'partial': True,
+        }
+        return (summary_payload, True)
+
+    # small diffs => return normal partials
+    return ({'event': 'DEVICES_TRAFFIC', 'data': diffs, 'partial': True}, False)
+
 
 
 async def _enforcement_loop():
@@ -593,8 +710,11 @@ def seed_devices_from_database():
         ip = row.get("ip")
         if not ip:
             continue
-
-        scout.discovered_ips.add(ip)
+        if scout is not None:
+            try:
+                scout.discovered_ips.add(ip)
+            except Exception:
+                pass
         payload = {
             "event": "NEW_DEVICE",
             "data": {
@@ -609,6 +729,10 @@ def seed_devices_from_database():
             },
         }
         try:
+            payload['data']['display_name'] = compute_display_name(row)
+        except Exception:
+            pass
+        try:
             asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
         except Exception:
             pass
@@ -616,8 +740,29 @@ def seed_devices_from_database():
     print(f"[*] Demo database mode seeded {len(rows)} device(s) from SQLite")
 
 
-seed_connected_devices_from_neighbors()
+if not ZT_DISABLE_MONITOR:
+    seed_connected_devices_from_neighbors()
+else:
+    # When monitor/scanning is disabled (tests/CI), still seed devices from DB for UI
+    pass
 seed_devices_from_database()
+
+# Optionally broadcast a deprecation notice for the `/devices` REST endpoint so
+# websocket-capable clients can show a banner and migrate away from polling.
+try:
+    if os.environ.get('DEVICES_DEPRECATION_NOTICE', '0').strip().lower() in ('1', 'true', 'yes', 'on'):
+        notice = {
+            'event': 'DEPRECATION_NOTICE',
+            'message': 'The /devices REST endpoint is deprecated. Use WebSocket deltas instead.',
+            'deprecated_endpoint': '/devices',
+            'timestamp': time.time(),
+        }
+        try:
+            asyncio.run_coroutine_threadsafe(manager.broadcast(notice), loop)
+        except Exception:
+            pass
+except Exception:
+    pass
 
 # --- Anomaly Alert Callback ---
 def on_anomaly_detected(ip: str):
@@ -636,6 +781,10 @@ def on_anomaly_detected(ip: str):
         "status": "Quarantined",
     }
     try:
+        payload['display_name'] = _display_for_ip(ip)
+    except Exception:
+        pass
+    try:
         asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
     except Exception:
         pass
@@ -650,14 +799,16 @@ def on_anomaly_detected(ip: str):
         pass
 
 # Monitor Start (Limit set to 50MB for testing)
-monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
-threading.Thread(target=monitor.start_monitoring, daemon=True).start()
+monitor = None
+if not ZT_DISABLE_MONITOR:
+    monitor = TrafficMonitor(interface=LAN_INTERFACE, threshold_mb=50, on_alert=on_anomaly_detected)
+    threading.Thread(target=monitor.start_monitoring, daemon=True).start()
 
-# Prime demo traffic after monitor is available
-try:
-    _prime_demo_traffic_from_database()
-except Exception:
-    pass
+    # Prime demo traffic after monitor is available
+    try:
+        _prime_demo_traffic_from_database()
+    except Exception:
+        pass
 
 
 def _find_ip_for_mac(mac: str) -> str:
@@ -739,6 +890,7 @@ async def _station_poller_loop():
         await asyncio.sleep(3)
 
 
+
 def _refresh_hotspot_state() -> None:
     global LAN_INTERFACE_MODE, HOTSPOT_ACTIVE, LAN_NETWORK, PREV_HOTSPOT_ACTIVE
     prev = HOTSPOT_ACTIVE
@@ -780,16 +932,27 @@ async def traffic_broadcast_loop():
             pass
 
         try:
-            _advance_demo_traffic_from_database()
+            if not ZT_DISABLE_MONITOR:
+                _advance_demo_traffic_from_database()
+            else:
+                # Disabled monitor: skip advancing demo traffic
+                pass
         except Exception:
             pass
 
         try:
-            await asyncio.to_thread(seed_connected_devices_from_neighbors)
+            if not ZT_DISABLE_MONITOR:
+                await asyncio.to_thread(seed_connected_devices_from_neighbors)
         except Exception:
             pass
 
-        mbps = monitor.get_current_mbps()
+        if monitor is not None:
+            try:
+                mbps = monitor.get_current_mbps()
+            except Exception:
+                mbps = 0.0
+        else:
+            mbps = 0.0
         await manager.broadcast(
             {
                 "event": "TRAFFIC_UPDATE",
@@ -799,7 +962,7 @@ async def traffic_broadcast_loop():
                 },
             }
         )
-        # Also broadcast per-device snapshots so frontend can show live per-device traffic
+        # Also broadcast per-device snapshots; send only deltas compared to prior snapshot
         try:
             device_rows = database.list_devices()
             per = {}
@@ -807,14 +970,90 @@ async def traffic_broadcast_loop():
                 ip = d.get("ip")
                 if not ip:
                     continue
-                snap = monitor.get_device_snapshot(ip)
-                per[ip] = {
-                    "mbps": snap.get("mbps", 0.0),
-                    "total_mb": snap.get("total_mb", 0.0),
-                    "total_bytes": snap.get("total_bytes", 0),
-                    "history": snap.get("history", []),
-                }
-            await manager.broadcast({"event": "DEVICES_TRAFFIC", "data": per})
+                if monitor is not None:
+                    snap = monitor.get_device_snapshot(ip)
+                    per[ip] = {
+                        "display_name": compute_display_name(d),
+                        "mbps": snap.get("mbps", 0.0),
+                        "total_mb": snap.get("total_mb", 0.0),
+                        "total_bytes": snap.get("total_bytes", 0),
+                        "history": snap.get("history", []),
+                    }
+                else:
+                    # Monitor disabled: provide zeroed snapshot using DB info
+                    per[ip] = {
+                        "display_name": compute_display_name(d),
+                        "mbps": 0.0,
+                        "total_mb": 0.0,
+                        "total_bytes": 0,
+                        "history": [],
+                    }
+            # build delta payload: include only devices with meaningful changes
+            diffs = {}
+            mbps_delta_threshold = float(os.environ.get("DELTA_Mbps_THRESHOLD", "0.02"))
+            for ip, info in per.items():
+                prev = PREV_DEVICE_SNAPSHOT.get(ip)
+                changed = False
+                if not prev:
+                    changed = True
+                else:
+                    # check mbps delta
+                    if abs(float(info.get("mbps", 0.0)) - float(prev.get("mbps", 0.0))) >= mbps_delta_threshold:
+                        changed = True
+                    # check total_bytes change
+                    if int(info.get("total_bytes", 0)) != int(prev.get("total_bytes", 0)):
+                        changed = True
+                if changed:
+                    diffs[ip] = info
+
+            # update snapshot store
+            PREV_DEVICE_SNAPSHOT.clear()
+            PREV_DEVICE_SNAPSHOT.update(per)
+
+            # Coalescing: when many diffs occur at once, send an aggregated summary
+            try:
+                coalesce_threshold = int(os.environ.get("DELTA_COALESCE_THRESHOLD", "100"))
+            except Exception:
+                coalesce_threshold = 100
+
+            # Use helper to build payload; this allows debouncing/recomputation below
+            payload, is_summary = build_device_traffic_payload(per, device_rows, mbps)
+
+            # If payload is a summary and we want to debounce, wait a short window and recompute
+            try:
+                coalesce_window_ms = int(os.environ.get('DELTA_COALESCE_WINDOW_MS', '0'))
+            except Exception:
+                coalesce_window_ms = 0
+
+            if payload and is_summary and coalesce_window_ms and coalesce_window_ms > 0:
+                # debounce: sleep and recompute per/devices to capture any immediate changes
+                await asyncio.sleep(coalesce_window_ms / 1000.0)
+                # recompute snapshots
+                try:
+                    device_rows = database.list_devices()
+                    per = {}
+                    for d in device_rows:
+                        ip = d.get('ip')
+                        if not ip:
+                            continue
+                        snap = monitor.get_device_snapshot(ip)
+                        per[ip] = {
+                            'display_name': compute_display_name(d),
+                            'mbps': snap.get('mbps', 0.0),
+                            'total_mb': snap.get('total_mb', 0.0),
+                            'total_bytes': snap.get('total_bytes', 0),
+                            'history': snap.get('history', []),
+                        }
+                    payload, is_summary = build_device_traffic_payload(per, device_rows, mbps)
+                except Exception:
+                    pass
+
+            if payload:
+                try:
+                    # payload already in broadcast-friendly shape
+                    await manager.broadcast(payload)
+                except Exception:
+                    pass
         except Exception:
             pass
         await asyncio.sleep(2)
@@ -822,12 +1061,25 @@ async def traffic_broadcast_loop():
 
 @app.on_event("startup")
 async def startup_tasks():
-    asyncio.create_task(traffic_broadcast_loop())
-    # Start station poller to detect associated stations from the wireless driver
-    try:
-        asyncio.create_task(_station_poller_loop())
-    except Exception:
-        pass
+    # Start traffic broadcast loop unless monitor is disabled for tests
+    if not ZT_DISABLE_MONITOR:
+        try:
+            asyncio.create_task(traffic_broadcast_loop())
+        except Exception:
+            pass
+
+        # Start station poller to detect associated stations from the wireless driver
+        try:
+            asyncio.create_task(_station_poller_loop())
+        except Exception:
+            pass
+    else:
+        # In test/CI mode we avoid starting monitor/scanner threads; run a minimal no-op loop if required
+        try:
+            # still start a lightweight broadcast loop that emits traffic=0 occasionally for UI
+            asyncio.create_task(traffic_broadcast_loop())
+        except Exception:
+            pass
 
     # Start optional Prometheus metrics exporter if available
     try:
@@ -917,13 +1169,7 @@ async def startup_tasks():
         temp_path = None
         if segments and isinstance(segments, (list, tuple)):
             try:
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -982,13 +1228,7 @@ async def startup_tasks():
 
         try:
             if segments and isinstance(segments, (list, tuple)):
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -1028,13 +1268,7 @@ async def startup_tasks():
         temp_path = None
         try:
             if segments and isinstance(segments, (list, tuple)):
-                p = Path(__file__).parent / 'policies.json'
-                with p.open() as fh:
-                    data = json.load(fh)
-                segs = data.get('segments', [])
-                filtered = [s for s in segs if s.get('name') in segments]
-                data_copy = dict(data)
-                data_copy['segments'] = filtered
+                data_copy = enforcer.filter_policy_document(segments)
                 import tempfile
 
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.json', prefix='policies-filter-')
@@ -1106,7 +1340,10 @@ async def allow_access(ip: str):
     segment = _device_segment_for_ip(ip)
     ok = enforcer.allow_device(ip, segment=segment or None)
     status = "Allowed" if ok else "Error"
-    await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
+    try:
+        await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status, "display_name": _display_for_ip(ip)})
+    except Exception:
+        await manager.broadcast({"event": "STATUS_UPDATE", "ip": ip, "status": status})
     try:
         existing = next((row for row in database.list_devices() if row["ip"] == ip), None)
         database.add_log("ALLOW", ip=ip, detail=f"status={status}")
@@ -1177,21 +1414,68 @@ async def set_device_segment(ip: str, segment: str):
         except Exception:
             pass
         database.add_log('SET_SEGMENT', ip=ip, detail=str({'segment': normalized or 'Unassigned'}))
-        await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized})
+        try:
+            await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized, 'display_name': _display_for_ip(ip)})
+        except Exception:
+            await manager.broadcast({'event': 'SEGMENT_UPDATE', 'ip': ip, 'segment': normalized})
         return {'message': f"set segment={normalized or 'Unassigned'} for {ip}"}
     except Exception as e:
         return {'error': str(e)}
 
 
 @app.get('/devices')
-def api_list_devices():
+def api_list_devices(request: Request, response: Response):
+    """Return list of devices. This endpoint is deprecated for heavy polling; a rate-limiter
+    and deprecation headers are provided to guide clients toward websocket deltas.
+    """
+    # Rate limiting (per-client IP) — prefer Redis-backed limiter when available
+    client_ip = request.client.host if request.client else 'unknown'
+    try:
+        limit = int(os.environ.get('DEVICES_RATE_LIMIT', '2'))
+    except Exception:
+        limit = 2
+    try:
+        window = int(os.environ.get('DEVICES_RATE_WINDOW_SEC', '10'))
+    except Exception:
+        window = 10
+
+    allowed, remaining, retry_after = rate_limiter.allow_request(client_ip, limit, window)
+
+    # set deprecation header for all responses
+    response.headers['X-Deprecated'] = 'true'
+    response.headers['Warning'] = '199 - "Deprecated endpoint: use WebSocket deltas instead"'
+    response.headers['X-RateLimit-Limit'] = str(limit)
+    response.headers['X-RateLimit-Remaining'] = str(remaining)
+
+    if not allowed:
+        response.headers['Retry-After'] = str(retry_after)
+        return Response(content=json.dumps({'error': 'rate_limited', 'retry_after': retry_after}), status_code=429, media_type='application/json')
     device_rows = database.list_devices()
     devices = []
     for row in device_rows:
-        live = monitor.get_device_snapshot(row["ip"])
+        live = monitor.get_device_snapshot(row["ip"]) if monitor is not None else {}
         online = _is_device_online(row.get("last_seen"))
+        # Compute a canonical display_name the frontend can prefer. Prefer the
+        # existing server-side helper `compute_display_name`, falling back to
+        # vendor/device_type concatenation when necessary.
+        try:
+            display_name = compute_display_name(row) or ''
+        except Exception:
+            display_name = ''
+        if not display_name:
+            vendor = (row.get('vendor') or '').strip()
+            device_type = (row.get('device_type') or '').strip() or _detect_device_type(vendor, row.get('mac'))
+            suffix = ''
+            if vendor:
+                display_name = f"{vendor} {device_type}".strip()
+            elif device_type:
+                display_name = device_type
+            else:
+                display_name = 'Unknown Device'
+
         devices.append({
             **row,
+            "display_name": display_name,
             "online": online,
             "trafficMbps": live.get("mbps", 0.0),
             "trafficBytes": live.get("total_bytes", 0),
@@ -1204,22 +1488,11 @@ def api_list_devices():
 @app.get('/segments')
 def api_list_segments():
     """Return available segmentation policies and assigned segments."""
-    # Load policies.json if present
-    policies = {}
-    try:
-        import json as _json
-        p = Path(__file__).parent / 'policies.json'
-        if p.exists():
-            with p.open() as fh:
-                policies = _json.load(fh)
-    except Exception:
-        policies = {}
-
-    # Collect unique assigned segments from database
-    assigned = sorted({d.get('segment') or '' for d in database.list_devices()})
+    scaffold = enforcer.build_segment_scaffold()
     return {
-        'policies': policies,
-        'assigned_segments': assigned,
+        'policies': enforcer.load_policy_document(),
+        'assigned_segments': scaffold.get('assigned_segments', []),
+        'segment_scaffold': scaffold,
     }
 
 

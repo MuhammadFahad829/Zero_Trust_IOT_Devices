@@ -1,0 +1,84 @@
+name: Perf Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/add-frontend-tests-ws-integration-and-coalesce
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run benchmark sweep
+        env:
+          ZT_DISABLE_MONITOR: '1'
+        run: |
+          PYTHONPATH=. python3 scripts/benchmark_broadcast.py --counts "200,500,1000,2000" --iters 20 --mbps 500 --outfile benchmark_results.json > benchmark_output.txt || true
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark_output.txt
+            benchmark_results.json
+
+      - name: Persist benchmark results to repo
+        if: ${{ always() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f benchmark_results.json ]; then
+            mkdir -p benchmarks
+            ts=$(date -u +"%Y%m%d-%H%M%SZ")
+            target="benchmarks/benchmark_results-${GITHUB_RUN_ID}-${ts}.json"
+            cp benchmark_results.json "$target"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "$target"
+            git commit -m "chore(bench): add benchmark results ${GITHUB_RUN_ID} ${ts}" || echo "no changes to commit"
+            git push origin HEAD || echo "push failed"
+          else
+            echo "benchmark_results.json not found; skipping commit"
+          fi
+
+      - name: Prune old benchmark results
+        if: ${{ always() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RETAIN_BENCHMARKS: 10
+        run: |
+          # Keep the latest $RETAIN_BENCHMARKS files in benchmarks/ (by mtime)
+          mkdir -p benchmarks
+          files=( $(ls -1t benchmarks/benchmark_results-*.json 2>/dev/null || true) )
+          count=${#files[@]}
+          if [ "$count" -le "$RETAIN_BENCHMARKS" ]; then
+            echo "No pruning needed; $count files <= $RETAIN_BENCHMARKS"
+            exit 0
+          fi
+          to_remove=( "${files[@]:$RETAIN_BENCHMARKS}" )
+          echo "Pruning ${#to_remove[@]} old benchmark files"
+          for f in "${to_remove[@]}"; do
+            git rm -f "$f" || rm -f "$f"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(bench): prune old benchmark results, keep $RETAIN_BENCHMARKS" || echo "no pruning changes"
+          git push origin HEAD || echo "push failed"
