@@ -58,3 +58,27 @@ jobs:
           else
             echo "benchmark_results.json not found; skipping commit"
           fi
+
+      - name: Prune old benchmark results
+        if: ${{ always() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RETAIN_BENCHMARKS: 10
+        run: |
+          # Keep the latest $RETAIN_BENCHMARKS files in benchmarks/ (by mtime)
+          mkdir -p benchmarks
+          files=( $(ls -1t benchmarks/benchmark_results-*.json 2>/dev/null || true) )
+          count=${#files[@]}
+          if [ "$count" -le "$RETAIN_BENCHMARKS" ]; then
+            echo "No pruning needed; $count files <= $RETAIN_BENCHMARKS"
+            exit 0
+          fi
+          to_remove=( "${files[@]:$RETAIN_BENCHMARKS}" )
+          echo "Pruning ${#to_remove[@]} old benchmark files"
+          for f in "${to_remove[@]}"; do
+            git rm -f "$f" || rm -f "$f"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(bench): prune old benchmark results, keep $RETAIN_BENCHMARKS" || echo "no pruning changes"
+          git push origin HEAD || echo "push failed"
