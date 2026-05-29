@@ -9,6 +9,7 @@ import HotspotBanner from './components/HotspotBanner';
 import DeprecationBanner from './components/DeprecationBanner';
 import TopDevices from './components/TopDevices';
 import Segmentation from './components/Segmentation';
+import Skeleton from './components/Skeleton';
 import { containerVariant } from './utils/animations';
 import { inferCategory, getDisplayName } from './utils/deviceIdentity';
 
@@ -38,6 +39,7 @@ const App = () => {
   const [viewMode, setViewMode] = useState('professional');
   const [trafficSummary, setTrafficSummary] = useState(null);
   const [deprecationNotice, setDeprecationNotice] = useState(null);
+  const [devicesLoading, setDevicesLoading] = useState(true);
 
   const fetchMode = useCallback(async () => {
     try {
@@ -218,10 +220,12 @@ const App = () => {
 
     const fetchDevices = async () => {
       try {
+        setDevicesLoading(true);
         const res = await fetch('http://localhost:8000/devices');
         if (!res.ok) {
           // If the endpoint is rate-limited or deprecated, skip seeding from REST
           console.warn('devices endpoint returned non-OK:', res.status);
+          setDevicesLoading(false);
           return;
         }
         const data = await res.json();
@@ -247,8 +251,10 @@ const App = () => {
           });
           return Array.from(byIp.values());
         });
+        setDevicesLoading(false);
       } catch (err) {
         console.error('Failed to fetch devices:', err);
+        setDevicesLoading(false);
       }
     };
 
@@ -707,6 +713,8 @@ const App = () => {
             </div>
 
                 <div className="space-y-3">
+                  {devicesLoading && <Skeleton rows={9} mode={viewMode === 'professional' ? 'table' : 'card'} />}
+                  <div className={devicesLoading ? 'hidden' : ''}>
               {viewMode === 'professional' ? (
                 <div className="rounded-2xl border border-gray-800 bg-gray-900/25 overflow-hidden">
                   <div className="overflow-x-auto">
@@ -885,7 +893,8 @@ const App = () => {
                     </div>
                   ))}
                 </motion.div>
-              )}
+                  )}
+                    </div>
             </div>
 
             {filteredDevices.length === 0 && (
