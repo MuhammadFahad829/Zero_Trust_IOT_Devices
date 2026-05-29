@@ -1453,22 +1453,25 @@ def api_list_devices(request: Request, response: Response):
     device_rows = database.list_devices()
     devices = []
     for row in device_rows:
-        live = monitor.get_device_snapshot(row["ip"])
+        live = monitor.get_device_snapshot(row["ip"]) if monitor is not None else {}
         online = _is_device_online(row.get("last_seen"))
-        # Compute a canonical display_name the frontend can prefer
-        explicit = _get_row_label(row)
-        if explicit:
-            display_name = explicit
-        else:
-            vendor = _clean_text(row.get('vendor'))
-            device_type = _clean_text(row.get('device_type')) or _detect_device_type(vendor, row.get('mac'))
-            suffix = _get_name_suffix(row)
-            if vendor and not _has_private_vendor_hint(vendor):
-                display_name = f"{vendor} {device_type}".strip() + suffix
+        # Compute a canonical display_name the frontend can prefer. Prefer the
+        # existing server-side helper `compute_display_name`, falling back to
+        # vendor/device_type concatenation when necessary.
+        try:
+            display_name = compute_display_name(row) or ''
+        except Exception:
+            display_name = ''
+        if not display_name:
+            vendor = (row.get('vendor') or '').strip()
+            device_type = (row.get('device_type') or '').strip() or _detect_device_type(vendor, row.get('mac'))
+            suffix = ''
+            if vendor:
+                display_name = f"{vendor} {device_type}".strip()
             elif device_type:
-                display_name = f"{device_type}".strip() + suffix
+                display_name = device_type
             else:
-                display_name = f"Unknown Device{suffix}".strip()
+                display_name = 'Unknown Device'
 
         devices.append({
             **row,
