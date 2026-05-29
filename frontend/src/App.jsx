@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import AuditLogsTable from './components/AuditLogsTable';
 import HotspotBanner from './components/HotspotBanner';
+import DeprecationBanner from './components/DeprecationBanner';
 import TopDevices from './components/TopDevices';
 import Segmentation from './components/Segmentation';
 import { containerVariant } from './utils/animations';
@@ -35,6 +36,7 @@ const App = () => {
   const [segmentScaffold, setSegmentScaffold] = useState(null);
   const [viewMode, setViewMode] = useState('professional');
   const [trafficSummary, setTrafficSummary] = useState(null);
+  const [deprecationNotice, setDeprecationNotice] = useState(null);
 
   const fetchMode = useCallback(async () => {
     try {
@@ -77,6 +79,10 @@ const App = () => {
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+      if (msg.event === 'DEPRECATION_NOTICE') {
+        setDeprecationNotice(msg.message || 'A server-side endpoint is deprecated; use WebSocket deltas instead.');
+        return;
+      }
       if (msg.event === 'NEW_DEVICE' && msg.data?.ip) {
         setDevices((prev) => {
           if (prev.some((d) => d.ip === msg.data.ip)) return prev;
@@ -266,6 +272,8 @@ const App = () => {
       window.removeEventListener('navigate:devices', onNavigateDevices);
     };
   }, [fetchMode]);
+
+  const dismissDeprecation = () => setDeprecationNotice(null);
 
   useEffect(() => {
     const fetchTraffic = async () => {
@@ -502,7 +510,9 @@ const App = () => {
             </div>
           </motion.div>
         </header>
-
+        {deprecationNotice && (
+          <DeprecationBanner message={deprecationNotice} onClose={dismissDeprecation} />
+        )}
         {!hotspotActive && (
           <HotspotBanner onRefresh={fetchMode} />
         )}

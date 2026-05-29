@@ -743,6 +743,23 @@ else:
     pass
 seed_devices_from_database()
 
+# Optionally broadcast a deprecation notice for the `/devices` REST endpoint so
+# websocket-capable clients can show a banner and migrate away from polling.
+try:
+    if os.environ.get('DEVICES_DEPRECATION_NOTICE', '0').strip().lower() in ('1', 'true', 'yes', 'on'):
+        notice = {
+            'event': 'DEPRECATION_NOTICE',
+            'message': 'The /devices REST endpoint is deprecated. Use WebSocket deltas instead.',
+            'deprecated_endpoint': '/devices',
+            'timestamp': time.time(),
+        }
+        try:
+            asyncio.run_coroutine_threadsafe(manager.broadcast(notice), loop)
+        except Exception:
+            pass
+except Exception:
+    pass
+
 # --- Anomaly Alert Callback ---
 def on_anomaly_detected(ip: str):
     print(f"[!!!] ANOMALY DETECTED: {ip} exceeded bandwidth limit!")
