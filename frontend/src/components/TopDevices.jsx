@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle, ShieldAlert } from 'lucide-react';
-import { getDisplayName } from '../utils/deviceIdentity';
+import { getDisplayName, getDeviceBadgeText } from '../utils/deviceIdentity';
 
 export default function TopDevices({ devices = [], onVerify = () => {}, onBlock = () => {} }) {
   const top = devices.slice(0, 8);
@@ -17,7 +17,7 @@ export default function TopDevices({ devices = [], onVerify = () => {}, onBlock 
           return (
             <div key={d.ip} className="flex items-center gap-2">
               <div className="w-12 flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">{getDisplayName(d).slice(0,2).toUpperCase()}</div>
+                <div className="w-10 h-10 rounded-full bg-gray-950 border border-gray-800 flex items-center justify-center text-gray-200 text-xs font-bold">{getDeviceBadgeText(d)}</div>
               </div>
 
               <div className="flex-1 min-w-0">

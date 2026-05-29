@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Wifi, Cpu, Smartphone, Monitor, ShieldAlert, CheckCircle, ArrowRight, StopCircle, Radio } from 'lucide-react';
-import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta } from '../utils/deviceIdentity';
+import { getVendorMeta, inferCategory, getDisplayName, getCategoryMeta, getDeviceBadgeText } from '../utils/deviceIdentity';
 import { formatBytes } from '../utils/format';
 
 const getDeviceIcon = (vendor, deviceType) => {
@@ -309,7 +309,6 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
                   {group.devices.map((device) => {
                     const isBlocked = device.status === 'Blocked' || device.status === 'Quarantined';
                     const displayName = getDisplayName(device);
-                    const vendorMeta = getVendorMeta(device.vendor);
                     const categoryMeta = getCategoryMeta(device.device_type, device.vendor);
                     return (
                       <button
@@ -330,7 +329,7 @@ export default function NetworkTopology({ devices = [], mode = 'replay' }) {
                           <div className="mt-0.5 truncate text-[11px] text-gray-400 font-mono">{device.ip}</div>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-1 text-[10px] text-gray-400">
-                          <span className="rounded-full border border-gray-700 bg-gray-900/40 px-2 py-0.5 text-gray-300">{vendorMeta.token}</span>
+                          <span className="rounded-full border border-gray-700 bg-gray-900/40 px-2 py-0.5 text-gray-300">{getDeviceBadgeText(device)}</span>
                           <span className="font-mono text-gray-500">{(Number(device.trafficMbps || 0)).toFixed(2)} MB/s</span>
                         </div>
                       </button>

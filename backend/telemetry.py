@@ -1,6 +1,8 @@
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server
     import logging
+    import os
+    import random
 
     logging.getLogger('prometheus_client').setLevel(logging.WARNING)
 
@@ -22,9 +24,10 @@ try:
         except Exception:
             pass
 
-    def inc_packet_processed():
+    def inc_packet_processed(n: int = 1):
         try:
-            PACKETS_PROCESSED.inc()
+            # allow batched increments
+            PACKETS_PROCESSED.inc(n)
         except Exception:
             pass
 
@@ -36,7 +39,10 @@ try:
 
     def observe_packet_latency(sec: float):
         try:
-            PACKET_PROC_LATENCY.observe(sec)
+            # sampling to reduce high-rate histogram updates; default 1.0 = observe all
+            sample_rate = float(os.getenv("ZEROTRUST_HISTOGRAM_SAMPLE_RATE", "1.0"))
+            if sample_rate >= 1.0 or random.random() < sample_rate:
+                PACKET_PROC_LATENCY.observe(sec)
         except Exception:
             pass
 except Exception:

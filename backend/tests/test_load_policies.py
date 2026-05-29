@@ -35,6 +35,40 @@ def test_load_policies_missing_file(tmp_path):
     assert eng.policy_defs == before
 
 
+def test_filter_policy_document_and_build_scaffold(tmp_path, monkeypatch):
+    data = {
+        "segments": [
+            {"name": "iot", "cidr": "10.0.0.0/24", "vlan_id": 100, "iface": "eth0.100", "limit_mbps": 5},
+            {"name": "guest", "cidr": "10.0.1.0/24", "vlan_id": 200, "iface": "eth0.200", "limit_mbps": 10},
+        ],
+        "rules": [{"id": "block_telnet", "match": {"protocol": "tcp", "dport": 23}, "action": "DROP"}],
+    }
+    p = tmp_path / "policies.json"
+    p.write_text(json.dumps(data))
+
+    eng = EnforcementEngine()
+    filtered = eng.filter_policy_document(["guest"], str(p))
+    assert [segment["name"] for segment in filtered["segments"]] == ["guest"]
+    assert filtered["rules"][0]["id"] == "block_telnet"
+
+    monkeypatch.setattr(
+        "backend.enforcement.database.list_devices",
+        lambda: [
+            {"ip": "10.0.1.10", "segment": "guest"},
+            {"ip": "10.0.1.11", "segment": "guest"},
+            {"ip": "10.0.9.9", "segment": ""},
+        ],
+    )
+
+    scaffold = eng.build_segment_scaffold(str(p))
+    assert scaffold["assigned_segments"] == ["guest"]
+    assert scaffold["unassigned_devices"] == ["10.0.9.9"]
+    assert scaffold["segments"][0]["name"] == "iot"
+    assert scaffold["segments"][0]["vlan_id"] == 100
+    assert scaffold["segments"][1]["device_count"] == 2
+    assert scaffold["segments"][1]["device_ips"] == ["10.0.1.10", "10.0.1.11"]
+
+
 def test_apply_segment_policies_prefers_iface_rules(monkeypatch):
     devices = [
         {"ip": "10.0.0.10", "segment": "iot"},

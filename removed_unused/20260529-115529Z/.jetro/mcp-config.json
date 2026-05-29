@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jetro": {
+      "command": "/home/fahad-mustafa/.jetro/runtime/node-linux-x64",
+      "args": [
+        "/home/fahad-mustafa/.jetro/mcp-server/index.js"
+      ],
+      "env": {
+        "JET_WORKSPACE": "/run/media/fahad-mustafa/Local Disk/Zero_Trust_IOT_Devices",
+        "JET_API_URL": "https://api.jetro.ai",
+        "PATH": "/home/fahad-mustafa/.jetro/runtime:/home/fahad-mustafa/.local/bin:/home/fahad-mustafa/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin"
+      }
+    }
+  }
+}
